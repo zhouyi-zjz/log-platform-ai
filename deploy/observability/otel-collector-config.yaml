@@ -1,0 +1,32 @@
+# OpenTelemetry Collector 可选配置：把应用 OTLP Trace 转发到 SkyWalking OAP。
+# 生产环境建议再补 metrics/logs pipeline，并通过 Secret 管理证书和认证参数。
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+
+processors:
+  memory_limiter:
+    check_interval: 1s
+    limit_mib: 512
+    spike_limit_mib: 128
+  batch:
+    send_batch_size: 512
+    timeout: 1s
+
+exporters:
+  otlp/skywalking:
+    endpoint: ${env:SKYWALKING_OAP_OTLP_ENDPOINT}
+    tls:
+      # OAP 使用 TLS 时改为 false，并配置 ca_file/cert_file/key_file。
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/skywalking]

@@ -1,0 +1,355 @@
+/**
+ * 移动端聊天页面样式
+ */
+@import './variables.scss';
+
+// 聊天页面容器
+.mobile-chat-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: $bg-color;
+  overflow: hidden;
+}
+
+// 顶部导航栏
+.chat-navbar {
+  background-color: $bg-color-light;
+  box-shadow: $shadow-sm;
+  z-index: 1000;
+}
+
+// 消息列表区域
+.message-list-wrapper {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: $spacing;
+  padding-bottom: calc($spacing + $safe-area-inset-bottom);
+  -webkit-overflow-scrolling: touch;
+}
+
+// 输入框区域
+.input-box-wrapper {
+  background-color: $bg-color-light;
+  border-top: 1px solid $border-color;
+  padding-bottom: $safe-area-inset-bottom;
+  z-index: 999;
+}
+
+// 消息项
+.message-item {
+  display: flex;
+  margin-bottom: $spacing-md;
+  animation: messageSlideIn $animation-duration ease-out;
+
+  &.user-message {
+    justify-content: flex-end;
+
+    .message-bubble {
+      background-color: $chat-bubble-user;
+      color: #ffffff;
+      margin-left: $spacing-lg;
+      border-bottom-right-radius: $spacing-xs;
+      white-space: pre-wrap;  // 用户消息保留换行
+    }
+  }
+
+  &.ai-message {
+    justify-content: flex-start;
+
+    .message-bubble {
+      background-color: $chat-bubble-ai;
+      color: $text-color;
+      margin-right: $spacing-lg;
+      border-bottom-left-radius: $spacing-xs;
+      box-shadow: $shadow-sm;
+    }
+  }
+}
+
+// 消息气泡
+.message-bubble {
+  max-width: $message-max-width;
+  padding: $spacing-sm $spacing;
+  border-radius: $border-radius-lg;
+  word-wrap: break-word;
+  word-break: break-word;
+  // white-space: pre-wrap;  // 移除，让子元素自己控制（流式输出用.streaming-text，Markdown用.markdown-content）
+  font-size: $font-size;
+  line-height: $line-height-lg;
+
+  // Markdown内容样式
+  :deep(p) {
+    margin: 0 0 $spacing-sm 0;
+
+    &:last-child {
+      margin-bottom: 0;
+    }
+  }
+
+  :deep(h1),
+  :deep(h2),
+  :deep(h3) {
+    margin: $spacing 0 $spacing-sm 0;
+    font-weight: $font-weight-bold;
+  }
+
+  :deep(h1) {
+    font-size: $font-size-xl;
+  }
+
+  :deep(h2) {
+    font-size: $font-size-lg;
+  }
+
+  :deep(h3) {
+    font-size: $font-size-md;
+  }
+
+  :deep(code) {
+    padding: 0.533vw 1.6vw;  // 2px 6px
+    background-color: rgba(0, 0, 0, 0.05);
+    border-radius: $border-radius-sm;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: $font-size-sm;
+  }
+
+  :deep(pre) {
+    margin: $spacing-sm 0;
+    padding: $spacing;
+    background-color: #282c34;
+    border-radius: $border-radius;
+    overflow-x: auto;
+
+    code {
+      padding: 0;
+      background-color: transparent;
+      color: #abb2bf;
+    }
+  }
+
+  :deep(ul),
+  :deep(ol) {
+    padding-left: $spacing-lg;
+    margin: $spacing-sm 0;
+  }
+
+  :deep(li) {
+    margin: $spacing-xs 0;
+  }
+
+  :deep(a) {
+    color: $primary-color;
+    text-decoration: underline;
+  }
+
+  :deep(blockquote) {
+    margin: $spacing-sm 0;
+    padding-left: $spacing;
+    border-left: 1.067vw solid $border-color;  // 4px
+    color: $text-color-secondary;
+  }
+
+  :deep(table) {
+    width: 100%;
+    border-collapse: collapse;
+    margin: $spacing-sm 0;
+    font-size: $font-size-sm;
+
+    th,
+    td {
+      padding: $spacing-xs;
+      border: 1px solid $border-color;
+    }
+
+    th {
+      background-color: $bg-color-dark;
+      font-weight: $font-weight-medium;
+    }
+  }
+}
+
+// 头像
+.message-avatar {
+  width: 9.6vw;   // 36px
+  height: 9.6vw;  // 36px
+  border-radius: 50%;
+  flex-shrink: 0;
+  background-color: $bg-color-dark;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: $text-color-secondary;
+  font-size: $font-size-sm;
+  font-weight: $font-weight-medium;
+  overflow: hidden;
+
+  img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+}
+
+.user-message .message-avatar {
+  margin-left: $spacing-sm;
+}
+
+.ai-message .message-avatar {
+  margin-right: $spacing-sm;
+}
+
+// 打字指示器
+.typing-indicator {
+  display: flex;
+  align-items: center;
+  padding: $spacing-sm $spacing;
+  background-color: $chat-bubble-ai;
+  border-radius: $border-radius-lg;
+  box-shadow: $shadow-sm;
+  max-width: 16vw;  // 60px
+
+  .dot {
+    width: 2.133vw;   // 8px
+    height: 2.133vw;  // 8px
+    margin: 0 0.533vw;  // 0 2px
+    background-color: $text-color-tertiary;
+    border-radius: 50%;
+    animation: typingBounce 1.4s infinite ease-in-out;
+
+    &:nth-child(1) {
+      animation-delay: 0s;
+    }
+
+    &:nth-child(2) {
+      animation-delay: 0.2s;
+    }
+
+    &:nth-child(3) {
+      animation-delay: 0.4s;
+    }
+  }
+}
+
+// 动画
+@keyframes messageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(2.667vw);  // 10px
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes typingBounce {
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+  }
+
+  30% {
+    transform: translateY(-2.133vw);  // -8px
+  }
+}
+
+// 加载更多
+.load-more {
+  text-align: center;
+  padding: $spacing;
+  color: $text-color-tertiary;
+  font-size: $font-size-sm;
+}
+
+// 滚动到底部按钮
+.scroll-to-bottom {
+  position: fixed;
+  right: $spacing-md;
+  bottom: calc($input-box-height + $spacing-md + $safe-area-inset-bottom);
+  width: 10.667vw;   // 40px
+  height: 10.667vw;  // 40px
+  border-radius: 50%;
+  background-color: $bg-color-light;
+  box-shadow: $shadow;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  z-index: 100;
+  transition: all $animation-duration;
+
+  &:active {
+    transform: scale(0.95);
+  }
+
+  &.hidden {
+    opacity: 0;
+    pointer-events: none;
+  }
+}
+
+// 新消息提示
+.new-message-tip {
+  position: fixed;
+  top: calc($navbar-height + $spacing + $safe-area-inset-top);
+  left: 50%;
+  transform: translateX(-50%);
+  padding: $spacing-xs $spacing;
+  background-color: $primary-color;
+  color: #ffffff;
+  border-radius: $border-radius-round;
+  font-size: $font-size-sm;
+  box-shadow: $shadow;
+  z-index: 100;
+  animation: slideDown $animation-duration ease-out;
+  cursor: pointer;
+
+  &:active {
+    opacity: 0.8;
+  }
+}
+
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -5.333vw);  // -20px
+  }
+
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+
+// 空状态
+.chat-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: flex-start;
+  padding-top: $spacing-lg;
+  color: $text-color-tertiary;
+
+  .empty-icon {
+    font-size: 17.067vw;  // 64px
+    margin-bottom: $spacing;
+  }
+
+  .empty-text {
+    font-size: $font-size;
+  }
+
+  .empty-tip {
+    font-size: $font-size-sm;
+    margin-top: $spacing-xs;
+  }
+}
+
+// 滚动到底部按钮位置调整（考虑工具栏）
+.scroll-to-bottom {
+  bottom: calc($input-box-height + 16vw + $spacing-md + $safe-area-inset-bottom);
+}

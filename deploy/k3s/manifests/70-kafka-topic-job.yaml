@@ -1,0 +1,27 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: kafka-topic-init-${DEPLOYMENT_ID}
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: kafka-topic-init
+spec:
+  backoffLimit: 12
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kafka-topic-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: kafka-topic-init
+          image: ${KAFKA_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              until /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1; do sleep 5; done
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic logs.raw --partitions 6 --replication-factor ${KAFKA_REPLICATION_FACTOR}
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic logs.raw.DLT --partitions 6 --replication-factor ${KAFKA_REPLICATION_FACTOR}
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --describe --topic logs.raw

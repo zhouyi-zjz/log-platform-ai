@@ -1,0 +1,43 @@
+{
+  "index_patterns": ["logs-platform-*"],
+  "data_stream": {},
+  "priority": 100,
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "logs-7d"
+    },
+    "mappings": {
+      "dynamic": false,
+      "properties": {
+        "@timestamp": {"type": "date"},
+        "event.ingested": {"type": "date"},
+        "project.id": {"type": "keyword"},
+        "deployment.environment": {"type": "keyword"},
+        "service.name": {"type": "keyword"},
+        "service.instance.id": {"type": "keyword"},
+        "trace.id": {"type": "keyword"},
+        "span.id": {"type": "keyword"},
+        "log.level": {"type": "keyword"},
+        "log.logger": {"type": "keyword"},
+        "code.namespace": {"type": "keyword"},
+        "code.function": {"type": "keyword"},
+        "message": {"type": "text"},
+        "error.type": {"type": "keyword"},
+        "error.stack_trace": {"type": "text"},
+        "user.id_hash": {"type": "keyword"},
+        "http": {
+          "type": "object",
+          "dynamic": false,
+          "properties": {
+            "method": {"type": "keyword"},
+            "status_code": {"type": "integer"},
+            "route": {"type": "keyword"},
+            "url": {"type": "keyword"},
+            "duration_ms": {"type": "long"}
+          }
+        },
+        "attributes": {"type": "flattened"}
+      }
+    }
+  }
+}

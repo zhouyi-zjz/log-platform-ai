@@ -1,0 +1,185 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+K3S_DIR="$ROOT_DIR/deploy/k3s"
+ENV_FILE="${1:-$K3S_DIR/.env}"
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  echo "Missing environment file: $ENV_FILE" >&2
+  echo "Copy deploy/k3s/.env.example to deploy/k3s/.env and edit every secret." >&2
+  exit 1
+fi
+
+PUSH_IMAGES_OVERRIDE="${PUSH_IMAGES-}"
+LOAD_IMAGES_OVERRIDE="${LOAD_IMAGES-}"
+SKIP_BUILD_OVERRIDE="${SKIP_BUILD-}"
+INSTALL_FLUENT_BIT_OVERRIDE="${INSTALL_FLUENT_BIT-}"
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+
+[[ -n "$PUSH_IMAGES_OVERRIDE" ]] && PUSH_IMAGES="$PUSH_IMAGES_OVERRIDE"
+[[ -n "$LOAD_IMAGES_OVERRIDE" ]] && LOAD_IMAGES="$LOAD_IMAGES_OVERRIDE"
+[[ -n "$SKIP_BUILD_OVERRIDE" ]] && SKIP_BUILD="$SKIP_BUILD_OVERRIDE"
+[[ -n "$INSTALL_FLUENT_BIT_OVERRIDE" ]] && INSTALL_FLUENT_BIT="$INSTALL_FLUENT_BIT_OVERRIDE"
+
+: "${NAMESPACE:=log-platform}"
+: "${STORAGE_CLASS:=local-path}"
+: "${APP_HOST:=logs.example.com}"
+: "${INGRESS_CLASS:=traefik}"
+: "${TLS_SECRET_NAME:=log-platform-tls}"
+: "${SESSION_COOKIE_SECURE:=true}"
+: "${IMAGE_REPOSITORY:=registry.example.com/log-platform}"
+: "${IMAGE_TAG:=dev}"
+: "${IMAGE_PULL_POLICY:=IfNotPresent}"
+: "${PUSH_IMAGES:=false}"
+: "${LOAD_IMAGES:=false}"
+: "${KAFKA_REPLICAS:=1}"
+: "${KAFKA_REPLICATION_FACTOR:=1}"
+: "${BACKEND_REPLICAS:=1}"
+: "${FRONTEND_REPLICAS:=1}"
+: "${INSTALL_FLUENT_BIT:=false}"
+: "${MYSQL_STORAGE_SIZE:=20Gi}"
+: "${KAFKA_STORAGE_SIZE:=50Gi}"
+: "${ES_STORAGE_SIZE:=100Gi}"
+: "${ES_JAVA_OPTS:=-Xms1g -Xmx1g}"
+: "${MYSQL_IMAGE:=mysql:8.4.2}"
+: "${KAFKA_IMAGE:=apache/kafka:3.9.1}"
+: "${ELASTICSEARCH_IMAGE:=docker.elastic.co/elasticsearch/elasticsearch:8.15.3}"
+: "${CURL_IMAGE:=curlimages/curl:8.10.1}"
+: "${FLUENT_BIT_IMAGE:=fluent/fluent-bit:3.2.10}"
+
+for required in DB_USERNAME DB_PASSWORD MYSQL_ROOT_PASSWORD LOG_INGEST_TOKEN; do
+  if [[ -z "${!required:-}" || "${!required}" == change-me-* ]]; then
+    echo "$required must be set to a non-default value in $ENV_FILE" >&2
+    exit 1
+  fi
+done
+
+if [[ "$DB_USERNAME" == "root" ]]; then
+  echo "DB_USERNAME must be a dedicated application user, not root" >&2
+  exit 1
+fi
+if [[ "$KAFKA_REPLICAS" != "1" || "$KAFKA_REPLICATION_FACTOR" != "1" ]]; then
+  echo "The included Kafka manifest is a single-node KRaft baseline; keep KAFKA_REPLICAS=1 and KAFKA_REPLICATION_FACTOR=1." >&2
+  echo "Use a Kafka operator or a reviewed multi-node manifest before changing these values." >&2
+  exit 1
+fi
+if [[ "$IMAGE_PULL_POLICY" != "IfNotPresent" && "$IMAGE_PULL_POLICY" != "Always" && "$IMAGE_PULL_POLICY" != "Never" ]]; then
+  echo "IMAGE_PULL_POLICY must be IfNotPresent, Always, or Never" >&2
+  exit 1
+fi
+
+for command_name in kubectl envsubst; do
+  command -v "$command_name" >/dev/null || {
+    echo "Required command not found: $command_name" >&2
+    exit 1
+  }
+done
+
+kubectl cluster-info >/dev/null
+kubectl get storageclass "$STORAGE_CLASS" >/dev/null
+
+BACKEND_IMAGE="$IMAGE_REPOSITORY/backend:$IMAGE_TAG"
+FRONTEND_IMAGE="$IMAGE_REPOSITORY/frontend:$IMAGE_TAG"
+DEPLOYMENT_ID="$(date +%s)"
+export NAMESPACE STORAGE_CLASS APP_HOST INGRESS_CLASS TLS_SECRET_NAME SESSION_COOKIE_SECURE
+export IMAGE_PULL_POLICY BACKEND_IMAGE FRONTEND_IMAGE DEPLOYMENT_ID
+export DB_USERNAME KAFKA_REPLICAS KAFKA_REPLICATION_FACTOR BACKEND_REPLICAS FRONTEND_REPLICAS
+export MYSQL_STORAGE_SIZE KAFKA_STORAGE_SIZE ES_STORAGE_SIZE ES_JAVA_OPTS
+export MYSQL_IMAGE KAFKA_IMAGE ELASTICSEARCH_IMAGE CURL_IMAGE FLUENT_BIT_IMAGE
+
+build_images() {
+  if [[ "${SKIP_BUILD:-false}" == "true" ]]; then
+    echo "Skipping image build because SKIP_BUILD=true"
+    return
+  fi
+  command -v docker >/dev/null || {
+    echo "docker is required to build images. Set SKIP_BUILD=true if images already exist." >&2
+    exit 1
+  }
+  docker build -f "$K3S_DIR/docker/backend.Dockerfile" -t "$BACKEND_IMAGE" "$ROOT_DIR"
+  docker build -f "$K3S_DIR/docker/frontend.Dockerfile" -t "$FRONTEND_IMAGE" "$ROOT_DIR"
+  if [[ "$PUSH_IMAGES" == "true" ]]; then
+    docker push "$BACKEND_IMAGE"
+    docker push "$FRONTEND_IMAGE"
+  fi
+  if [[ "$LOAD_IMAGES" == "true" ]]; then
+    command -v k3s >/dev/null || {
+      echo "k3s is required for LOAD_IMAGES=true" >&2
+      exit 1
+    }
+    docker save "$BACKEND_IMAGE" | sudo k3s ctr images import -
+    docker save "$FRONTEND_IMAGE" | sudo k3s ctr images import -
+  fi
+  if [[ "$PUSH_IMAGES" != "true" && "$LOAD_IMAGES" != "true" ]]; then
+    echo "Set PUSH_IMAGES=true for a registry or LOAD_IMAGES=true for a single-node K3s cluster." >&2
+    exit 1
+  fi
+}
+
+apply_manifest() {
+  local file="$1"
+  envsubst < "$K3S_DIR/manifests/$file" | kubectl apply -f -
+}
+
+create_configmaps() {
+  kubectl -n "$NAMESPACE" create configmap log-platform-db-init \
+    --from-file=01-base.sql="$ROOT_DIR/sql/base.sql" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  kubectl -n "$NAMESPACE" create configmap log-platform-es-init \
+    --from-file=logs-index-template.json="$ROOT_DIR/deploy/elasticsearch/logs-index-template.json" \
+    --from-file=ilm-policy.json="$K3S_DIR/config/ilm-policy.json" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  if [[ "$INSTALL_FLUENT_BIT" == "true" ]]; then
+    kubectl -n "$NAMESPACE" create configmap log-platform-fluent-bit-config \
+      --from-file=fluent-bit.conf="$ROOT_DIR/deploy/fluent-bit/fluent-bit.conf" \
+      --from-file=parsers.conf="$ROOT_DIR/deploy/fluent-bit/parsers.conf" \
+      --dry-run=client -o yaml | kubectl apply -f -
+  fi
+}
+
+echo "Building application images..."
+build_images
+
+echo "Creating namespace and secrets..."
+apply_manifest 00-namespace.yaml
+kubectl -n "$NAMESPACE" create secret generic log-platform-db \
+  --from-literal=root-password="$MYSQL_ROOT_PASSWORD" \
+  --from-literal=app-password="$DB_PASSWORD" \
+  --dry-run=client -o yaml | kubectl apply -f -
+kubectl -n "$NAMESPACE" create secret generic log-platform-app \
+  --from-literal=ingest-token="$LOG_INGEST_TOKEN" \
+  --dry-run=client -o yaml | kubectl apply -f -
+create_configmaps
+
+echo "Applying data services..."
+apply_manifest 10-mysql.yaml
+apply_manifest 20-kafka.yaml
+apply_manifest 30-elasticsearch.yaml
+kubectl -n "$NAMESPACE" rollout status statefulset/mysql --timeout=15m
+kubectl -n "$NAMESPACE" rollout status statefulset/kafka --timeout=15m
+kubectl -n "$NAMESPACE" rollout status statefulset/elasticsearch --timeout=15m
+
+echo "Initializing Kafka and Elasticsearch..."
+apply_manifest 70-kafka-topic-job.yaml
+apply_manifest 80-elasticsearch-init-job.yaml
+kubectl -n "$NAMESPACE" wait --for=condition=complete "job/kafka-topic-init-$DEPLOYMENT_ID" --timeout=10m
+kubectl -n "$NAMESPACE" wait --for=condition=complete "job/elasticsearch-init-$DEPLOYMENT_ID" --timeout=10m
+
+echo "Applying application services..."
+apply_manifest 40-backend.yaml
+apply_manifest 50-frontend.yaml
+apply_manifest 60-ingress.yaml
+if [[ "$INSTALL_FLUENT_BIT" == "true" ]]; then
+  apply_manifest 90-fluent-bit.yaml
+fi
+kubectl -n "$NAMESPACE" rollout status deployment/log-platform-backend --timeout=10m
+kubectl -n "$NAMESPACE" rollout status deployment/log-platform-frontend --timeout=10m
+
+echo
+echo "Deployment completed. Check status with:"
+echo "  kubectl -n $NAMESPACE get pods,svc,ingress"
+echo "  deploy/k3s/smoke-test.sh $ENV_FILE"

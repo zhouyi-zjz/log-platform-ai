@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: log-platform
+  namespace: ${NAMESPACE}
+spec:
+  ingressClassName: ${INGRESS_CLASS}
+  rules:
+    - host: ${APP_HOST}
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: log-platform-frontend
+                port:
+                  number: 80
+  tls:
+    - hosts:
+        - ${APP_HOST}
+      secretName: ${TLS_SECRET_NAME}

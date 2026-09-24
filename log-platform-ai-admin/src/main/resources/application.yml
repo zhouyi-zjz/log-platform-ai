@@ -1,0 +1,66 @@
+server:
+  port: ${SERVER_PORT:8103}
+  servlet:
+    session:
+      timeout: 30m
+      cookie:
+        http-only: true
+        same-site: lax
+        secure: ${SESSION_COOKIE_SECURE:false}
+
+spring:
+  application:
+    name: log-platform-ai
+  kafka:
+    # 本地开发默认连接 localhost；生产环境请通过环境变量覆盖，并开启 SASL/TLS。
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    producer:
+      acks: all
+      retries: 5
+      properties:
+        enable.idempotence: true
+        compression.type: lz4
+    consumer:
+      group-id: ${KAFKA_CONSUMER_GROUP:logs-es-writer}
+      enable-auto-commit: false
+      auto-offset-reset: earliest
+      properties:
+        isolation.level: read_committed
+  datasource:
+    url: ${DB_URL:jdbc:mysql://8.138.166.208:33036/log-platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
+    username: ${DB_USERNAME:root}
+    password: ${DB_PASSWORD:hgai5350}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+
+  sql:
+    init:
+      mode: never
+
+# 日志平台采集链路配置。采集器直写 Kafka 时只需关注 kafka-topic；
+# 无法使用 Kafka 输出插件的项目可以 POST 到 /monitor/api/logs/ingest。
+log-platform:
+  ingest:
+    kafka-topic: ${LOG_KAFKA_TOPIC:logs.raw}
+    topic-auto-create: ${LOG_TOPIC_AUTO_CREATE:false}
+    topic-partitions: ${LOG_TOPIC_PARTITIONS:6}
+    topic-replication-factor: ${LOG_TOPIC_REPLICATION_FACTOR:2}
+    consumer-group: ${KAFKA_CONSUMER_GROUP:logs-es-writer}
+    consumer-enabled: ${LOG_CONSUMER_ENABLED:false}
+    max-payload-bytes: ${LOG_MAX_PAYLOAD_BYTES:1048576}
+    api-token: ${LOG_INGEST_TOKEN:}
+    elasticsearch-endpoints: ${ELASTICSEARCH_ENDPOINTS:http://localhost:9200}
+    elasticsearch-index: ${ELASTICSEARCH_INDEX:logs-platform-default}
+    elasticsearch-username: ${ELASTICSEARCH_USERNAME:}
+    elasticsearch-password: ${ELASTICSEARCH_PASSWORD:}
+    bulk-max-actions: ${LOG_BULK_MAX_ACTIONS:1000}
+    bulk-flush-interval-ms: ${LOG_BULK_FLUSH_INTERVAL_MS:1000}
+  query:
+    # 查询边界必须在后端配置，不能由前端请求覆盖。
+    max-page-size: ${LOG_QUERY_MAX_PAGE_SIZE:500}
+    timeout: ${LOG_QUERY_TIMEOUT:3s}
+    connect-timeout-ms: ${LOG_QUERY_CONNECT_TIMEOUT_MS:1000}
+    read-timeout-ms: ${LOG_QUERY_READ_TIMEOUT_MS:5000}
+    admin-max-hours: ${LOG_QUERY_ADMIN_MAX_HOURS:168}
+    rate-limit-per-minute: ${LOG_QUERY_RATE_LIMIT_PER_MINUTE:120}
+    max-concurrent: ${LOG_QUERY_MAX_CONCURRENT:20}
+    max-context-size: ${LOG_QUERY_MAX_CONTEXT_SIZE:100}

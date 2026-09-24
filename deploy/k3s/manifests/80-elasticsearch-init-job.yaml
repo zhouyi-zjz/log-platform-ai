@@ -1,0 +1,36 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: elasticsearch-init-${DEPLOYMENT_ID}
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: elasticsearch-init
+spec:
+  backoffLimit: 12
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: elasticsearch-init
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: elasticsearch-init
+          image: ${CURL_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              until curl -fsS http://elasticsearch:9200 >/dev/null; do sleep 5; done
+              curl -fsS -X PUT http://elasticsearch:9200/_ilm/policy/logs-7d -H 'Content-Type: application/json' --data-binary @/config/ilm-policy.json
+              curl -fsS -X PUT http://elasticsearch:9200/_index_template/logs-platform-template -H 'Content-Type: application/json' --data-binary @/config/logs-index-template.json
+              curl -fsS -X PUT http://elasticsearch:9200/_data_stream/logs-platform-default || true
+              curl -fsS http://elasticsearch:9200/_index_template/logs-platform-template
+          volumeMounts:
+            - name: config
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: config
+          configMap:
+            name: log-platform-es-init

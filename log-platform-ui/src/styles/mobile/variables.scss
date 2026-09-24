@@ -1,0 +1,95 @@
+/**
+ * 移动端H5样式变量
+ * 用于统一移动端UI风格
+ */
+
+// 主题色
+$primary-color: #1989fa;
+$success-color: #07c160;
+$warning-color: #ff976a;
+$danger-color: #ee0a24;
+$info-color: #909399;
+
+// 文字颜色
+$text-color: #323233;
+$text-color-secondary: #646566;
+$text-color-tertiary: #969799;
+$text-color-light: #c8c9cc;
+
+// 背景色
+$bg-color: #f7f8fa;
+$bg-color-light: #ffffff;
+$bg-color-dark: #f2f3f5;
+
+// 聊天气泡颜色
+$chat-bubble-user: #1989fa;      // 用户消息（右侧，蓝色）
+$chat-bubble-ai: #ffffff;        // AI消息（左侧，白色）
+$chat-bubble-shadow: rgba(0, 0, 0, 0.1);
+
+// 边框颜色
+$border-color: #ebedf0;
+$border-color-light: #f7f8fa;
+
+// 圆角（基于375px设计稿）
+$border-radius-sm: 1.067vw;    // 4px
+$border-radius: 2.133vw;       // 8px
+$border-radius-lg: 3.2vw;      // 12px
+$border-radius-round: 999px;
+
+// 间距（基于375px设计稿）
+$spacing-xs: 1.067vw;   // 4px
+$spacing-sm: 2.133vw;   // 8px
+$spacing: 3.2vw;        // 12px
+$spacing-md: 4.267vw;   // 16px
+$spacing-lg: 5.333vw;   // 20px
+$spacing-xl: 6.4vw;     // 24px
+
+// 字体大小（基于375px设计稿）
+$font-size-xs: 2.667vw;   // 10px
+$font-size-sm: 3.2vw;     // 12px
+$font-size: 3.733vw;      // 14px
+$font-size-md: 4.267vw;   // 16px
+$font-size-lg: 4.8vw;     // 18px
+$font-size-xl: 5.333vw;   // 20px
+
+// 字体粗细
+$font-weight-normal: 400;
+$font-weight-medium: 500;
+$font-weight-bold: 600;
+
+// 行高
+$line-height-sm: 1.2;
+$line-height: 1.5;
+$line-height-lg: 1.8;
+
+// 阴影
+$shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+$shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+$shadow-lg: 0 4px 12px rgba(0, 0, 0, 0.15);
+
+// 动画时长
+$animation-duration-fast: 0.2s;
+$animation-duration: 0.3s;
+$animation-duration-slow: 0.5s;
+
+// 安全区域（适配刘海屏）
+$safe-area-inset-top: env(safe-area-inset-top);
+$safe-area-inset-bottom: env(safe-area-inset-bottom);
+$safe-area-inset-left: env(safe-area-inset-left);
+$safe-area-inset-right: env(safe-area-inset-right);
+
+// 顶部导航栏高度（基于375px设计稿）
+$navbar-height: 12.267vw;  // 46px
+
+// 输入框区域高度（基于375px设计稿）
+$input-box-height: 16vw;   // 60px
+
+// 消息最大宽度
+$message-max-width: 75%;
+
+// 工具类
+.ellipsis {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

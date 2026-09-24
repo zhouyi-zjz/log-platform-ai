@@ -1,0 +1,10 @@
+.git
+.idea
+.agents
+.codex
+node_modules
+log-platform-ui/node_modules
+log-platform-ui/dist
+**/target
+*.log
+deploy/k3s/.env

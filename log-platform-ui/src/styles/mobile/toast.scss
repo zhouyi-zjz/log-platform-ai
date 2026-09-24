@@ -1,0 +1,51 @@
+// 自定义Toast样式
+.custom-toast {
+  // 顶部偏移，避免遮挡顶部导航栏
+  top: calc(var(--van-nav-bar-height, 46px) + 16px) !important;
+
+  // 美化样式 - 透明浅蓝色风格
+  .van-toast__text {
+    padding: 12px 20px;
+    font-size: 14px;
+    line-height: 1.5;
+    border-radius: 8px;
+    background: rgba(59, 130, 246, 0.12) !important;
+    color: #1f2329;
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15), 0 0 0 1px rgba(59, 130, 246, 0.1);
+    backdrop-filter: blur(10px);
+  }
+
+  // 成功样式
+  &.van-toast--success {
+    .van-toast__text {
+      background: rgba(16, 185, 129, 0.12) !important;
+      color: #059669;
+      box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15), 0 0 0 1px rgba(16, 185, 129, 0.1);
+    }
+  }
+
+  // 失败样式
+  &.van-toast--fail {
+    .van-toast__text {
+      background: rgba(239, 68, 68, 0.12) !important;
+      color: #dc2626;
+      box-shadow: 0 4px 12px rgba(239, 68, 68, 0.15), 0 0 0 1px rgba(239, 68, 68, 0.1);
+    }
+  }
+}
+
+// 动画优化
+.van-toast--top {
+  animation: toast-slide-down 0.3s ease-out;
+}
+
+@keyframes toast-slide-down {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -20px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
