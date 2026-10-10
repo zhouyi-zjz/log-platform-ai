@@ -91,7 +91,7 @@ Tempo 的推荐对象存储后端与 Elasticsearch 日志索引模型不同。�
 
 - 需要维护 Kafka Topic、消费者、死信和 offset 监控。
 - ES、Kafka、Tempo 需要独立容量、升级和故障演练。
-- Kafka 至少 3 broker、ES 至少 3 data 节点是生产建议，MVP 可用单节点开发拓扑。
+- Kafka 至少 3 broker、ES 至少 3 data 节点是生产建议；当前 K3s MVP 基线使用 2 broker 和 2 个 ES 节点。
 - 峰值 EPS、平均事件大小和查询并发未最终确认，容量结论不能直接作为生产采购量。
 
 ## 验证计划

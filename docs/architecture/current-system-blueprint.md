@@ -9,7 +9,7 @@
 | 标记 | 含义 |
 |---|---|
 | `已实现` | 代码和对应服务接口存在，并有单元/上下文测试或构建证据 |
-| `基线可部署` | K3s、初始化 Job 或配置已纳入仓库，可用于单节点联调 |
+| `基线可部署` | K3s、初始化 Job 或配置已纳入仓库，可用于开发/联调 |
 | `待联调` | 需要真实 Kafka、Elasticsearch、Tempo、Redis 或 Prometheus 环境验证 |
 | `部分完整` | 主干可用，但前端入口、HA、备份恢复、故障演练或生产级安全仍缺失 |
 | `未实现` | 当前只有规划、扩展点或没有实现代码 |
@@ -194,7 +194,7 @@ flowchart TB
     COLLECTOR_CLIENT[业务应用 / Fluent Bit DaemonSet]
     FINOPS_EXT[独立 FinOps 服务]
 
-    subgraph K3S[log-platform 命名空间：单节点联调基线]
+    subgraph K3S[log-platform 命名空间：Kafka/ES 双实例联调基线]
         ING[Traefik Ingress]
         FE[Frontend Deployment<br/>Nginx + Vue]
         API[Backend Deployment<br/>8103 / API、Session、Query]
@@ -206,8 +206,8 @@ flowchart TB
 
         MYSQL[(MySQL StatefulSet<br/>1 Pod)]
         REDIS[(Redis StatefulSet<br/>1 Pod)]
-        KAFKA[(Kafka KRaft StatefulSet<br/>默认 1 Pod / 6 分区)]
-        ES[(Elasticsearch StatefulSet<br/>1 Pod / single-node)]
+        KAFKA[(Kafka KRaft StatefulSet<br/>2 Pods / RF=2 / 6 分区)]
+        ES[(Elasticsearch StatefulSet<br/>2 Pods / cluster)]
     end
 
     subgraph External[外部或可选观测栈]
@@ -253,8 +253,8 @@ flowchart TB
 | 区域 | 当前状态 | 主要缺口 |
 |---|---|---|
 | API / Consumer 解耦 | 已落地 | Consumer 多副本扩展和分区再均衡尚未做真实滚动升级验证 |
-| Kafka | 单节点 KRaft 基线 | 生产建议 3 broker、认证/TLS、副本因子和故障演练 |
-| Elasticsearch | 单节点、关闭安全认证、7 天 ILM | 生产集群、认证/TLS、快照恢复、容量压测 |
+| Kafka | 双节点 KRaft、RF=2、关闭认证/TLS | 生产建议 3 broker、认证/TLS、故障演练 |
+| Elasticsearch | 双节点、关闭安全认证、7 天 ILM | 生产集群、认证/TLS、快照恢复、容量压测 |
 | MySQL | StatefulSet 单 Pod | HA、备份恢复、迁移演练 |
 | Redis | StatefulSet 单 Pod，API 开启共享 Session/限流 | Redis HA、故障转移和多副本 Session 验证 |
 | OTel / Tempo / Loki / Prometheus | Collector 清单和配置存在，后端按开关连接 | 外部后端部署、抓取、告警通知和完整 Trace 联调 |
@@ -353,7 +353,7 @@ flowchart LR
 | 登录、Session、CSRF、项目 ACL | 85% | `LoginController`、`SecurityConfig`、`ProjectAuthorizationService`、MySQL Schema、前端登录 | 登录风控、Redis HA、项目级角色/配额 |
 | HTTP 采集 | 80% | `LogIngestController`、Token 校验、payload 限制、Kafka ack、部署环境变量 | 真实 Kafka ack/超时与压测 |
 | Fluent Bit 采集 | 75% | `deploy/fluent-bit/*`、`90-fluent-bit.yaml`、磁盘 buffer | 容器 stdout 自动发现、跨节点断链演练 |
-| Kafka 缓冲、重试、DLT | 65% | `LogIngestConfiguration`、Topic Init Job、DLT Service | 单节点、无 TLS/ACL 基线、无故障演练 |
+| Kafka 缓冲、重试、DLT | 65% | `LogIngestConfiguration`、Topic Init Job、DLT Service | 双节点、无 TLS/ACL 基线、无故障演练 |
 | 归一化与 ES 幂等写入 | 80% | `LogEventNormalizer`、`LogKafkaConsumer`、`ElasticsearchLogWriter`、单元测试 | 真实 Bulk、mapping、积压恢复和容量证据 |
 | 查询、分页、聚合、上下文 | 85% | `LogQueryController`、白名单 DSL、`search_after`、前端工作台 | 无 PIT；部分 ES 超时响应仍可能透传 |
 | 详情脱敏与查询审计 | 75% | `LogFieldRedactor`、`LogQueryAuditService`、详情/审计测试 | 导出审计和更细粒度数据治理 |
@@ -363,12 +363,12 @@ flowchart LR
 | DLT 管理与单条重放 | 55% | `DltAdminController`、`DltReplayService`、审计与指标 | 无前端管理页；真实 Kafka offset/幂等核对待验证 |
 | FinOps Budget Audit | 55% | Schema、`FinopsAuditConsumer`、`BudgetAuditNormalizer`、独立索引/查询 | 默认关闭；外部 FinOps 合约和联调未完成 |
 | 指标、Collector、告警接入 | 50% | Actuator、Micrometer、Collector/Prometheus 配置、Runbook | Prometheus 抓取、Grafana 面板、通知渠道和告警演练 |
-| K3s 部署与可用性基线 | 60% | API/Consumer Deployment、PDB、HPA、NetworkPolicy、Smoke Test | Kafka/ES/MySQL/Redis 均单节点；备份恢复与故障演练 |
+| K3s 部署与可用性基线 | 60% | API/Consumer Deployment、PDB、HPA、NetworkPolicy、Smoke Test | Kafka/ES 双实例，MySQL/Redis 单节点；备份恢复与故障演练 |
 | 保存查询、分享、AI 分析 | 0% | 当前无实现代码 | 产品需求尚未进入交付范围 |
 
 ## 7. 结论与验收优先级
 
-当前系统可以作为**功能型日志检索 MVP 和单节点联调基线**：采集、Kafka 缓冲、归一化、ES 查询、权限边界和 Trace 关联的主链路已经具备。不能将其表述为生产级可观测平台，原因是 HA、容量、备份恢复、真实观测栈联调和告警闭环尚未形成证据。
+当前系统可以作为**功能型日志检索 MVP 和 Kafka/ES 双实例联调基线**：采集、Kafka 缓冲、归一化、ES 查询、权限边界和 Trace 关联的主链路已经具备。不能将其表述为生产级可观测平台，原因是完整 HA、容量、备份恢复、真实观测栈联调和告警闭环尚未形成证据。
 
 建议按以下顺序补齐：
 

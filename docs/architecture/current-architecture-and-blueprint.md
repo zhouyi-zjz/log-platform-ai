@@ -11,7 +11,7 @@
 
 当前项目是一个面向小规模、多项目接入的日志检索 MVP：Vue 单页前端通过 Spring Boot 单体后端完成会话登录和日志检索；Fluent Bit 或 HTTP 接口将日志送入 Kafka；同一个后端进程批量消费、归一化后写入 Elasticsearch Data Stream；MySQL 保存平台用户、项目和授权关系。
 
-项目已经具备“采集、缓冲、规范化、7 天存储、受控查询、基础登录、单节点部署”的主干。本轮已完成六项正确性与安全修复：
+项目已经具备“采集、缓冲、规范化、7 天存储、受控查询、基础登录、K3s 双实例数据面部署”的主干。本轮已完成六项正确性与安全修复：
 
 1. 查询游标改为 `@timestamp + event.id`，不再对 Elasticsearch `_id` 排序。
 2. Kafka 消费使用 `project.id + event.id` 的稳定摘要作为 ES 文档 `_id`，重复 `create` 的 409 按幂等成功处理。
@@ -20,7 +20,7 @@
 5. 应用不再提供数据库默认地址、账号或密码；管理员通过 Secret 在启动时创建或同步。
 6. Trace 后端统一为 Tempo，链路固定为 OTel Agent -> OTel Collector -> Tempo。
 
-当前仍不能按生产级日志平台验收，主要缺口是：容量结论尚未压测；Kafka、ES、MySQL 和 Redis 清单仍是单节点；Prometheus 抓取、告警、备份恢复、Tempo 部署和故障演练尚未完成。Session/限流已经提供 Redis 开关，但 Redis 单副本不代表 HA。`300 EPS` 仍只是按 500 万条/天平均流量的 5 倍得到的设计目标，不是实测吞吐。
+当前仍不能按生产级日志平台验收，主要缺口是：容量结论尚未压测；MySQL 和 Redis 清单仍是单节点，Kafka 双 controller 不能容忍单节点故障后继续选主，ES 双节点的 TLS、认证和快照仍未完成；Prometheus 抓取、告警、备份恢复、Tempo 部署和故障演练尚未完成。Session/限流已经提供 Redis 开关，但 Redis 单副本不代表 HA。`300 EPS` 仍只是按 500 万条/天平均流量的 5 倍得到的设计目标，不是实测吞吐。
 
 因此，当前准确口径是：**功能型 MVP，设计写入峰值 300 EPS，实测可支撑 QPS 未知，暂不具备生产 SLA 承诺条件。**
 
@@ -34,8 +34,8 @@
 | `log-platform-ai-admin` | Java 21、Spring Boot 3.5.3 | 登录鉴权、HTTP 采集、Kafka 消费、日志归一化、ES 写入与查询 | 已实现 |
 | `log-platform-ai-common` | Java record/domain | 用户、登录态、统一响应、日志事件模型 | 已实现 |
 | MySQL 8.4 | JDBC | 平台用户、项目和用户项目授权 | 基线可部署 |
-| Kafka 3.9.1 | KRaft | 原始日志缓冲、削峰、重放、死信 Topic | 单节点基线可部署 |
-| Elasticsearch 8.15.3 | Data Stream、ILM | 日志索引、全文检索、聚合、7 天生命周期 | 单节点基线可部署 |
+| Kafka 3.9.1 | KRaft | 原始日志缓冲、削峰、重放、死信 Topic | 双实例基线可部署，生产需奇数 controller/TLS |
+| Elasticsearch 8.15.3 | Data Stream、ILM | 日志索引、全文检索、聚合、7 天生命周期 | 双实例基线可部署，生产需 TLS/认证/快照 |
 | Fluent Bit 3.2.10 | tail、磁盘 buffer、Kafka output | 采集 `/var/log/apps/*.log` 并直写 Kafka | 可选基线可部署 |
 | OTel Collector | OTLP | Trace/Metric/Log 管线、尾采样、发送队列和健康端点 | 可选纳入 K3s，Tempo/Loki 需外部提供 |
 | Tempo | Trace backend | 完整 Trace 存储与查询 | 联查 API 已实现；后端仍由外部观测栈提供 |
@@ -93,14 +93,14 @@ flowchart TB
     NGINX --> BACKEND["Spring Boot 后端 Pod"]
 
     BACKEND --> MYSQL["MySQL StatefulSet：1 Pod、20 GiB"]
-    BACKEND --> KAFKA["Kafka KRaft StatefulSet：1 Pod、50 GiB"]
-    BACKEND --> ES["Elasticsearch StatefulSet：1 Pod、100 GiB、1 GiB heap"]
+    BACKEND --> KAFKA["Kafka KRaft StatefulSet：2 Pod、每 Pod 50 GiB"]
+    BACKEND --> ES["Elasticsearch StatefulSet：2 Pod、每 Pod 100 GiB、1 GiB heap"]
     FB["可选 Fluent Bit DaemonSet"] --> KAFKA
 
     KAFKA --> BACKEND
 ```
 
-该拓扑的目标是低成本联调和 MVP 验收，不是高可用生产拓扑。安装脚本会强制 `KAFKA_REPLICAS=1` 和副本因子 `1`；ES 同样固定单节点并关闭安全认证。
+该拓扑提供 K3s 内部双实例基线，Kafka Topic 副本因子和 Elasticsearch 节点数均为 2；两个 KRaft controller 无法在单节点故障后继续选主，因此不是完整的生产高可用拓扑。生产环境应使用奇数 Kafka controller、TLS/SASL、ES TLS/认证和 Operator 管理的节点拓扑。
 
 ## 3. 核心设计方案
 
@@ -226,10 +226,10 @@ sequenceDiagram
 | 认证 | MySQL 用户、BCrypt、Session、CSRF、登录/退出/当前用户 | 已实现 | 已接入 | 默认内存 Session；设置 `SESSION_STORE_TYPE=redis` 后可共享，Redis HA 待验证 |
 | 采集 | Fluent Bit 文件 tail + 磁盘缓冲 + Kafka output | 不经过后端 | 可选 DaemonSet | 基线可用，未做容器 stdout 自动发现 |
 | 采集 | HTTP JSON 入口、共享 Token、1 MiB 逻辑限制 | 已实现 | 无管理界面 | broker ack 后返回 202；项目独立 Token 已支持轮换 |
-| 消息 | `logs.raw`、6 分区、DLT、生产者幂等 | 已实现 | 初始化 Job | 单节点可运行，生产 HA 未实现 |
+| 消息 | `logs.raw`、6 分区、DLT、生产者幂等 | 已实现 | 初始化 Job | 双实例可运行，生产 HA 未实现 |
 | 处理 | 日志字段归一化 | 已实现 | - | 有单元测试 |
 | 处理 | 批量消费、稳定 ID、幂等写入、失败重试、DLT | 已实现 | - | 有单元测试，无 Kafka/ES 集成测试 |
-| 存储 | Data Stream、受控 mapping、7 天 ILM | 已实现 | 初始化 Job | 单 ES 基线可用 |
+| 存储 | Data Stream、受控 mapping、7 天 ILM | 已实现 | 初始化 Job | 双 ES 基线可用，生产认证/快照未实现 |
 | 检索 | 时间、项目、环境、服务、实例、Trace、Span、级别、错误、关键字、属性 | 已实现 | 已接入主要字段 | 固定 `@timestamp + event.id` 排序 |
 | 分页 | `search_after` | 已实现 | 已接入 | 稳定游标已实现；PIT 待实现 |
 | 详情 | 服务端权限约束详情 API | 已实现 | 已接入详情抽屉 | 详情失败保留列表快照 |
@@ -246,7 +246,7 @@ sequenceDiagram
 | 产品 | 保存查询、分享 | 未实现 | 未实现 | 待实现 |
 | 治理 | 查询/管理审计、敏感字段脱敏 | 已实现 | 已接入查询链路 | 异步导出审计和告警待补 |
 | AI | 摘要、根因分析、自然语言查询、语义检索 | 未实现 | 未实现 | 项目名含 AI，但暂无业务能力 |
-| 运维 | K3s 安装、初始化、健康检查、入口冒烟 | 已实现 | 已实现 | 单节点基线 |
+| 运维 | K3s 安装、初始化、健康检查、入口冒烟 | 已实现 | 已实现 | Kafka/ES 双实例基线；MySQL/Redis 单 Pod |
 | 运维 | Actuator/Prometheus 指标 | 已实现入口、消费、Bulk、查询、导出指标 | `/actuator/prometheus` 已暴露 | Prometheus/告警接入待验证 |
 | 运维 | PDB/HPA/NetworkPolicy/Redis 清单 | 已实现 K3s 基线 | 可部署 | metrics-server、策略和 Redis HA 待验证 |
 | 运维 | Dashboard、备份恢复、故障演练 | 未实现 | 未实现 | 生产阻断项 |
@@ -317,9 +317,9 @@ sequenceDiagram
 | 原始数据量 | 约 7.15 GiB/天 | 计算值 |
 | ES 7 天主数据 | 约 75.1 GiB | 含 1.5 倍索引放大，不含副本 |
 | 生产 ES 预算 | 约 225.3 GiB，建议至少 300 GiB 可用 | 1 副本 + 50% 余量 |
-| 当前 K3s ES | 单节点 100 GiB，1 GiB heap，2 CPU 上限 | 开发基线，不满足生产预算 |
+| 当前 K3s ES | 2 节点、每节点 100 GiB，1 GiB heap，2 CPU 上限 | 开发基线，不满足生产预算 |
 | Kafka 2 天生产预算 | 约 42.9 GiB，建议每 broker 100 GiB | 含副本与余量 |
-| 当前 K3s Kafka | 单节点 50 GiB，1 CPU 上限 | 开发基线 |
+| 当前 K3s Kafka | 2 broker、每 broker 50 GiB，1 CPU 上限 | 开发基线 |
 
 ### 7.3 写入能力推导
 
@@ -344,7 +344,7 @@ EPS_write <= min(C * B / T_bulk, Q_es, Kafka 可持续吞吐)
 | 450 EPS | `T_bulk <= 1.11s` | 设计峰值加 50% 余量 |
 | 600 EPS | `T_bulk <= 0.83s` | 2 倍突发验证目标 |
 
-这只是必要条件，不是测量结果。实际批次在低流量、重平衡、部分失败和 poll 周期下可能小于 500；单节点 ES 同时承担读写时，`Q_es` 往往先成为瓶颈。
+这只是必要条件，不是测量结果。实际批次在低流量、重平衡、部分失败和 poll 周期下可能小于 500；双节点 ES 仍同时承担读写时，`Q_es` 往往先成为瓶颈。
 
 当前可以对外给出的容量口径：
 
@@ -372,7 +372,7 @@ EPS_write <= min(C * B / T_bulk, Q_es, Kafka 可持续吞吐)
 - 单个用户/IP 每分钟 120 次，相当于长期平均 **2 QPS/用户/IP**。
 - 20 并发和 120 次/分钟都是**每个后端实例**的内存限制；不能把增加副本后的简单倍增视为有效扩容，因为 Session 和限流尚未分布式化。
 - 聚合、7 天查询、通配关键字和高基数属性查询的成本远高于详情查询，必须分场景压测。
-- 当前 ES 单节点只有 1 GiB heap，且与写入共享资源，无法据此承诺 10 QPS 或 20 QPS 的生产容量。
+- 当前每个 ES 节点只有 1 GiB heap，且与写入共享资源，无法据此承诺 10 QPS 或 20 QPS 的生产容量。
 
 当前可以对外给出的查询口径：
 
@@ -494,7 +494,7 @@ flowchart LR
 
 ### Phase 1：高可用、可观测与容量认证
 
-- **已完成可部署基线**：Micrometer/Actuator 指标、Redis StatefulSet 与 Session/分布式限流开关、PDB/HPA/NetworkPolicy、资源 requests/limits。
+- **已完成可部署基线**：双实例 Kafka/ES、Micrometer/Actuator 指标、Redis StatefulSet 与 Session/分布式限流开关、PDB/HPA/NetworkPolicy、资源 requests/limits。
 - **待实现**：Kafka 至少 3 broker、RF=3、minISR=2；ES 至少 3 节点并启用副本、TLS、认证和 Snapshot；MySQL 使用受管 HA 或主从方案。
 - **已完成代码/部署基线**：API 与 ingest worker 分成独立 Deployment；consumer concurrency、poll 和 Bulk 动作上限已配置化；Bulk 字节上限仍待补充。
 - **待验证**：Prometheus/Grafana/Alertmanager 抓取和告警、Redis 连通性与故障切换、滚动升级和 NetworkPolicy 规则。

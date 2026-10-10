@@ -5,6 +5,7 @@ metadata:
   namespace: ${NAMESPACE}
 spec:
   clusterIP: None
+  publishNotReadyAddresses: true
   selector:
     app.kubernetes.io/name: kafka
   ports:
@@ -58,20 +59,15 @@ spec:
             - name: controller
               containerPort: 9093
           env:
-            # This manifest is intentionally a single-node KRaft baseline for K3s.
-            # Set KAFKA_REPLICAS=3 and replace the quorum voter list for a cluster.
-            - name: KAFKA_NODE_ID
-              value: "1"
+            # The entrypoint below derives node.id from the StatefulSet ordinal (1/2).
             - name: KAFKA_PROCESS_ROLES
               value: broker,controller
             - name: KAFKA_LISTENERS
               value: PLAINTEXT://:9092,CONTROLLER://:9093
-            - name: KAFKA_ADVERTISED_LISTENERS
-              value: PLAINTEXT://kafka:9092
             - name: KAFKA_CONTROLLER_LISTENER_NAMES
               value: CONTROLLER
             - name: KAFKA_CONTROLLER_QUORUM_VOTERS
-              value: 1@kafka-0.kafka-headless.${NAMESPACE}.svc.cluster.local:9093
+              value: 1@kafka-0.kafka-headless.${NAMESPACE}.svc.cluster.local:9093,2@kafka-1.kafka-headless.${NAMESPACE}.svc.cluster.local:9093
             - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
               value: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
             - name: KAFKA_INTER_BROKER_LISTENER_NAME
@@ -79,10 +75,14 @@ spec:
             - name: KAFKA_AUTO_CREATE_TOPICS_ENABLE
               value: "false"
             - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
-              value: "1"
+              value: "2"
             - name: KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR
-              value: "1"
+              value: "2"
             - name: KAFKA_TRANSACTION_STATE_LOG_MIN_ISR
+              value: "1"
+            - name: KAFKA_DEFAULT_REPLICATION_FACTOR
+              value: "2"
+            - name: KAFKA_MIN_INSYNC_REPLICAS
               value: "1"
             - name: KAFKA_LOG_RETENTION_HOURS
               value: "48"
@@ -92,6 +92,17 @@ spec:
               value: "6"
             - name: CLUSTER_ID
               value: MkU3OEVBNTcwNTJENDM2Qk
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          command: ["/bin/sh", "-ec"]
+          args:
+            - |
+              # StatefulSet ordinals are zero-based; Kafka node IDs are 1 and 2.
+              export KAFKA_NODE_ID="$(expr "$(hostname | sed 's/.*-//')" + 1)"
+              export KAFKA_ADVERTISED_LISTENERS="PLAINTEXT://$(hostname).kafka-headless.$(printenv POD_NAMESPACE).svc.cluster.local:9092"
+              exec /etc/kafka/docker/run
           volumeMounts:
             - name: data
               mountPath: /var/lib/kafka/data

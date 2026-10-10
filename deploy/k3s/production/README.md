@@ -1,7 +1,7 @@
 # 生产拓扑门禁
 
-`deploy/k3s` 目录中的 MySQL、Kafka、Elasticsearch 和 Redis 清单是单节点联调基线，不能通过
-调整副本数直接升级为生产 HA。生产环境必须先安装并验收对应 Operator 或使用受管服务，再把
+`deploy/k3s` 目录中的 Kafka 和 Elasticsearch 清单是双实例联调基线，MySQL 和 Redis 仍是单 Pod；
+这套清单不能直接升级为生产 HA。生产环境必须先安装并验收对应 Operator 或使用受管服务，再把
 应用环境变量指向生产端点。
 
 ## 必选依赖
@@ -17,7 +17,7 @@
 - [`strimzi-kafka.yaml`](strimzi-kafka.yaml)：Kafka 生产 CR 参考。
 - [`eck-elasticsearch.yaml`](eck-elasticsearch.yaml)：Elasticsearch 生产 CR 参考。
 - [`redis-ha-values.yaml`](redis-ha-values.yaml)：Redis HA Helm Values 参考。
-- [`production-gate.sh`](production-gate.sh)：部署前门禁，防止误把单节点清单当作生产集群。
+- [`production-gate.sh`](production-gate.sh)：部署前门禁，防止误把 K3s 基线当作生产集群。
 
 ## 应用切换
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
-# 生产门禁只验证外部 HA 依赖已明确接管，避免误用单节点联调清单。
+# 生产门禁只验证外部 HA 依赖已明确接管，避免误把 K3s 基线当作生产集群。
 : "${KAFKA_HA_READY:=false}"
 : "${ELASTICSEARCH_HA_READY:=false}"
 : "${MYSQL_HA_READY:=false}"

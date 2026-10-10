@@ -60,5 +60,5 @@ flowchart LR
 ## 6. 尚需外部环境完成的门禁
 
 P0 代码和部署资产不等于生产认证。Kafka 三副本、ES 多节点/TLS/Snapshot、MySQL HA、Redis
-HA、Alertmanager 通知、真实压测、故障演练和备份恢复必须在目标集群完成。当前 K3s 单节点清单
+HA、Alertmanager 通知、真实压测、故障演练和备份恢复必须在目标集群完成。当前 K3s Kafka/ES 双实例清单
 仍只作为开发和联调基线。

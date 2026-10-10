@@ -2,7 +2,7 @@
 
 > 版本：v1.4（P0 生产闭环代码、观测栈联调资产、FinOps 只读投影和 DLT 运维基线已交付）
 >
-> 本图区分“代码已实现”“清单可部署”和“真实环境待验证”。Kafka、Elasticsearch、MySQL 仍是单节点基线；Redis 已用于多副本会话/限流开关，但当前清单只有单副本，不代表 Redis HA。
+> 本图区分“代码已实现”“清单可部署”和“真实环境待验证”。Kafka、Elasticsearch 是双实例基线，MySQL 仍是单节点；Redis 已用于多副本会话/限流开关，但当前清单只有单副本，不代表 Redis HA。
 
 ## 1. 功能分层
 
@@ -123,4 +123,4 @@ flowchart LR
 | FinOps Budget Audit 投影 | 已实现独立 Topic 消费、v1 Schema/metadata-only 校验、独立 ES 索引、稳定 ID 幂等和 ACL 查询 | 单元测试通过；真实 FinOps/Kafka/ES 联调待验证 |
 | DLT 运维 | 已实现固定 Topic 白名单、单 partition/offset 重放、管理员权限、审计和积压/结果指标 | 边界单元测试；真实 Kafka 重放与幂等核对待验证 |
 | OTel/Tempo/Loki/Prometheus | 已提供 Collector、Compose 联调栈、Grafana 数据源、告警规则和 Smoke Test | 配置/脚本静态验证通过；目标环境抓取与通知链路待验证 |
-| 生产 HA 参考与门禁 | 已提供 Strimzi Kafka、ECK ES、Redis HA values 和部署门禁；默认 K3s 清单仍为单节点联调基线 | 真实集群、故障演练、备份恢复与容量压测 |
+| 生产 HA 参考与门禁 | 已提供 Strimzi Kafka、ECK ES、Redis HA values 和部署门禁；默认 K3s 清单为 Kafka/ES 双实例联调基线 | 真实集群、故障演练、备份恢复与容量压测 |

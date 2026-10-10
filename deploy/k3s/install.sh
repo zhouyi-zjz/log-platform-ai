@@ -36,8 +36,9 @@ set +a
 : "${IMAGE_PULL_POLICY:=IfNotPresent}"
 : "${PUSH_IMAGES:=false}"
 : "${LOAD_IMAGES:=false}"
-: "${KAFKA_REPLICAS:=1}"
-: "${KAFKA_REPLICATION_FACTOR:=1}"
+: "${KAFKA_REPLICAS:=2}"
+: "${KAFKA_REPLICATION_FACTOR:=2}"
+: "${ES_REPLICAS:=2}"
 : "${BACKEND_REPLICAS:=1}"
 : "${CONSUMER_REPLICAS:=1}"
 : "${FRONTEND_REPLICAS:=1}"
@@ -88,9 +89,13 @@ if (( ${#BOOTSTRAP_ADMIN_PASSWORD} < 12 )); then
   echo "BOOTSTRAP_ADMIN_PASSWORD must contain at least 12 characters" >&2
   exit 1
 fi
-if [[ "$KAFKA_REPLICAS" != "1" || "$KAFKA_REPLICATION_FACTOR" != "1" ]]; then
-  echo "The included Kafka manifest is a single-node KRaft baseline; keep KAFKA_REPLICAS=1 and KAFKA_REPLICATION_FACTOR=1." >&2
-  echo "Use a Kafka operator or a reviewed multi-node manifest before changing these values." >&2
+if [[ "$KAFKA_REPLICAS" != "2" || "$KAFKA_REPLICATION_FACTOR" != "2" ]]; then
+  echo "This K3s deployment is configured for exactly two Kafka brokers with topic replication factor 2." >&2
+  echo "Set KAFKA_REPLICAS=2 and KAFKA_REPLICATION_FACTOR=2, or use the production operator manifests for another topology." >&2
+  exit 1
+fi
+if [[ "$ES_REPLICAS" != "2" ]]; then
+  echo "This K3s deployment is configured for exactly two Elasticsearch nodes; set ES_REPLICAS=2." >&2
   exit 1
 fi
 if [[ "$IMAGE_PULL_POLICY" != "IfNotPresent" && "$IMAGE_PULL_POLICY" != "Always" && "$IMAGE_PULL_POLICY" != "Never" ]]; then
@@ -113,7 +118,7 @@ FRONTEND_IMAGE="$IMAGE_REPOSITORY/frontend:$IMAGE_TAG"
 DEPLOYMENT_ID="$(date +%s)"
 export NAMESPACE STORAGE_CLASS APP_HOST INGRESS_CLASS TLS_SECRET_NAME SESSION_COOKIE_SECURE
 export IMAGE_PULL_POLICY BACKEND_IMAGE FRONTEND_IMAGE DEPLOYMENT_ID
-export DB_USERNAME KAFKA_REPLICAS KAFKA_REPLICATION_FACTOR BACKEND_REPLICAS CONSUMER_REPLICAS FRONTEND_REPLICAS
+export DB_USERNAME KAFKA_REPLICAS KAFKA_REPLICATION_FACTOR ES_REPLICAS BACKEND_REPLICAS CONSUMER_REPLICAS FRONTEND_REPLICAS
 export BOOTSTRAP_ADMIN_DISPLAY_NAME
 export MYSQL_STORAGE_SIZE KAFKA_STORAGE_SIZE ES_STORAGE_SIZE REDIS_STORAGE_SIZE ES_JAVA_OPTS
 export MYSQL_IMAGE KAFKA_IMAGE ELASTICSEARCH_IMAGE REDIS_IMAGE CURL_IMAGE FLUENT_BIT_IMAGE

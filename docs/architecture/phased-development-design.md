@@ -22,7 +22,7 @@
 
 1. **已实现基线**：Actuator/Micrometer 指标、HTTP RED/Trace 完整率/消息传播指标、Redis Session/分布式限流开关、PDB/HPA/NetworkPolicy、Redis StatefulSet 和部署变量。
 2. **已实现代码边界**：W3C Trace Context、Kafka Header 传播、SDK 无关的异步 Metadata 传播端口、Tempo 日志/Trace 联查、Prometheus 告警规则和 Collector 尾采样/发送队列。
-3. **已实现部署边界**：API 与 Consumer 独立 Deployment，Consumer 不暴露业务 Service；默认仍是单节点开发拓扑。
+3. **已实现部署边界**：API 与 Consumer 独立 Deployment，Consumer 不暴露业务 Service；默认数据面为 Kafka/ES 双实例、MySQL/Redis 单 Pod 的开发拓扑。
 4. **仍待实现/验证**：Kafka 至少 3 Broker、RF=3、minISR=2；ES 至少 3 节点、TLS、认证、副本和 Snapshot；MySQL 使用受管 HA。
 5. **仍待验证**：Prometheus 抓取、Grafana/Alertmanager 告警、Kafka lag 和 JVM/磁盘面板；当前已提供采集点和告警规则。
 6. **仍待验证**：按 60/150/300/450 EPS 阶梯、600 EPS 突发、24 小时稳定性和故障重启矩阵完成容量报告。
