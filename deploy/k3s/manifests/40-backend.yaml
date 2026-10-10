@@ -77,6 +77,8 @@ spec:
               value: "${BOOTSTRAP_ADMIN_DISPLAY_NAME}"
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: kafka:9092
+            - name: KAFKA_SECURITY_PROTOCOL
+              value: "${KAFKA_SECURITY_PROTOCOL}"
             - name: KAFKA_CONSUMER_GROUP
               value: logs-es-writer
             - name: LOG_KAFKA_TOPIC

@@ -59,6 +59,7 @@ kubectl -n log-platform create secret tls log-platform-tls \
 - 后端在 K3s 中设置 `SESSION_STORE_TYPE=redis` 和 `LOG_QUERY_DISTRIBUTED_RATE_LIMIT=true`，会话与查询限流依赖 Redis Service；Redis 当前只有 1 个副本和 1 个 PVC，只是共享状态基线，不是 Redis HA。无 Redis 的本地开发/测试默认使用进程内 Session 和限流。
 - `/actuator/health`、`/actuator/metrics` 和 `/actuator/prometheus` 已暴露给集群内部监控；HPA 需要集群已安装 `metrics-server`，Prometheus 需要允许访问后端 8103 端口。
 - API 与 Consumer 已拆成两个 Deployment：API 的 `LOG_CONSUMER_ENABLED=false`，Consumer 使用独立副本数和无 Service 暴露的 8104 端口，二者共享 Kafka consumer group 以按分区扩展消费。
+- K3s 内置 Kafka 使用 `PLAINTEXT` 监听 `kafka:9092`，因此 `.env` 中默认 `KAFKA_SECURITY_PROTOCOL=PLAINTEXT`；接入外部 TLS/SASL Kafka 时必须同时设置协议和对应的 SSL/SASL 参数，不能继续使用默认值。
 - `deploy/observability/prometheus-rules.yaml` 提供接入拒绝率、Bulk 失败、查询 P95、Trace 完整率和 Tempo 降级告警；需要在目标 Prometheus Operator 中安装后才会生效。
 - `INSTALL_PROMETHEUS_RULES=true` 时安装上述 `PrometheusRule`；目标集群必须已有 Prometheus Operator 和 `monitoring` 命名空间，否则保持关闭并由监控团队单独应用规则。
 - `INSTALL_OTEL_COLLECTOR=true` 时会额外部署 `otel-collector` Service。Collector 只负责信号转发和尾采样，Tempo/Loki 仍需由目标观测栈提供；`OTEL_ENABLED=true` 后后端通过 OTLP HTTP 发送 Trace，Collector 或下游不可用不应阻塞日志接入。

@@ -40,6 +40,7 @@ DB_URL='jdbc:mysql://mysql:3306/log-platform?useUnicode=true&characterEncoding=u
 DB_USERNAME='logplatform' \
 DB_PASSWORD='replace-with-database-secret' \
 KAFKA_BOOTSTRAP_SERVERS=kafka-1:9092,kafka-2:9092 \
+KAFKA_SECURITY_PROTOCOL=PLAINTEXT \
 LOG_CONSUMER_ENABLED=true \
 LOG_INGEST_TOKEN='replace-with-secret' \
 ELASTICSEARCH_ENDPOINTS='https://es-1:9200,https://es-2:9200' \
