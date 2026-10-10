@@ -26,7 +26,7 @@ public final class TelemetrySchema {
             "BUDGET_DECISION", "RESERVATION_CREATED", "RESERVATION_RELEASED",
             "RESERVATION_EXPIRED", "SETTLEMENT_RECORDED");
     private static final Set<String> DECISIONS = Set.of(
-            "ALLOW", "DENY", "SHADOW_ALLOW", "SHADOW_DENY", "RELEASED", "EXPIRED", "SETTLED");
+            "ALLOW", "DENY", "SHADOW_ALLOW", "SHADOW_DENY", "RELEASED", "EXPIRED", "SETTLED", "UNKNOWN");
     private static final Map<String, Integer> MAX_LENGTHS = Map.ofEntries(
             Map.entry("event.id", 256),
             Map.entry("tenant.id", 64),

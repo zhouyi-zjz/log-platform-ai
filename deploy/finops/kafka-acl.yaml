@@ -1,0 +1,51 @@
+# Kafka ACL / mTLS 交付基线。实际证书由公司 CA 和 Secret 管理系统签发。
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: agent-platform-finops-producer
+  labels:
+    strimzi.io/cluster: finops-kafka
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: ai.usage.v1
+          patternType: literal
+        operations: [Write, Describe]
+      - resource:
+          type: topic
+          name: ai.budget.audit.v1
+          patternType: literal
+        operations: [Write, Describe]
+---
+apiVersion: kafka.strimzi.io/v1beta2
+kind: KafkaUser
+metadata:
+  name: log-platform-observability-consumer
+  labels:
+    strimzi.io/cluster: finops-kafka
+spec:
+  authentication:
+    type: tls
+  authorization:
+    type: simple
+    acls:
+      - resource:
+          type: topic
+          name: ai.budget.audit.v1
+          patternType: literal
+        operations: [Read, Describe]
+      - resource:
+          type: topic
+          name: ai.budget.audit.v1.DLT
+          patternType: literal
+        operations: [Read, Write, Describe]
+      - resource:
+          type: group
+          name: log-platform-budget-audit
+          patternType: literal
+        operations: [Read]

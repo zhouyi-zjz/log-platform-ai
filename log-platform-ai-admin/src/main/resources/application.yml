@@ -46,6 +46,16 @@ spring:
   kafka:
     # 本地开发默认连接 localhost；生产环境请通过环境变量覆盖，并开启 SASL/TLS。
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    client-id: ${LOG_PLATFORM_KAFKA_SERVICE_PRINCIPAL:log-platform-observability}
+    properties:
+      # 生产环境由 Secret 注入双向 TLS 证书；默认保留 SSL，避免明文连接被误用于生产。
+      security.protocol: ${KAFKA_SECURITY_PROTOCOL:SSL}
+      ssl.truststore.location: ${KAFKA_SSL_TRUSTSTORE_LOCATION:}
+      ssl.truststore.password: ${KAFKA_SSL_TRUSTSTORE_PASSWORD:}
+      ssl.keystore.location: ${KAFKA_SSL_KEYSTORE_LOCATION:}
+      ssl.keystore.password: ${KAFKA_SSL_KEYSTORE_PASSWORD:}
+      ssl.key.password: ${KAFKA_SSL_KEY_PASSWORD:}
+      ssl.endpoint.identification.algorithm: ${KAFKA_SSL_ENDPOINT_ALGORITHM:HTTPS}
     producer:
       acks: all
       retries: 5
@@ -79,8 +89,8 @@ log-platform:
   finops:
     # 日志平台不拥有 Token、成本或预算账本；正式切换前保持 DISABLED/SHADOW。
     mode: ${FINOPS_INTEGRATION_MODE:DISABLED}
-    usage-topic: ${FINOPS_USAGE_TOPIC:finops.usage.v1}
-    budget-audit-topic: ${FINOPS_BUDGET_AUDIT_TOPIC:finops.budget-audit.v1}
+    usage-topic: ${FINOPS_USAGE_TOPIC:ai.usage.v1}
+    budget-audit-topic: ${FINOPS_BUDGET_AUDIT_TOPIC:ai.budget.audit.v1}
     timeout-ms: ${FINOPS_TIMEOUT_MS:500}
     fail-open: ${FINOPS_FAIL_OPEN:true}
     metadata-only: ${FINOPS_METADATA_ONLY:true}

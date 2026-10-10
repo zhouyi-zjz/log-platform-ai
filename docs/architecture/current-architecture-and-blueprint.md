@@ -5,6 +5,8 @@
 
 本蓝图对应的落地设计与功能架构见：[功能架构图](functional-architecture.md)、[分阶段开发与详细设计](phased-development-design.md)。当前已完成 Phase 0 边界契约、Phase 1 可观测数据面代码基线、API/Consumer 解耦部署基线，以及 Phase 2 聚合分析和异步 CSV 导出；真实 Kafka/ES/K3s/Redis 联调、HA、压测和故障演练仍待现场验证。
 
+四类现状视图（功能蓝图、产品能力图、系统拓扑图、业务链路图）及模块完整度汇总见：[当前系统功能蓝图与链路完整度](current-system-blueprint.md)。
+
 ## 1. 执行摘要
 
 当前项目是一个面向小规模、多项目接入的日志检索 MVP：Vue 单页前端通过 Spring Boot 单体后端完成会话登录和日志检索；Fluent Bit 或 HTTP 接口将日志送入 Kafka；同一个后端进程批量消费、归一化后写入 Elasticsearch Data Stream；MySQL 保存平台用户、项目和授权关系。

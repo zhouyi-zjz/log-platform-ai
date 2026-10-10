@@ -14,9 +14,9 @@ public class FinopsIntegrationProperties {
     /** FinOps 集成运行模式。 */
     private Mode mode = Mode.DISABLED;
     /** Usage Event 的独立 Kafka 通道名称。 */
-    private String usageTopic = "finops.usage.v1";
+    private String usageTopic = "ai.usage.v1";
     /** Budget Decision 的独立 Kafka 通道名称。 */
-    private String budgetAuditTopic = "finops.budget-audit.v1";
+    private String budgetAuditTopic = "ai.budget.audit.v1";
     /** 外部 FinOps 请求的有界超时时间。 */
     private int timeoutMs = 500;
     /** 外部 FinOps 不可用时是否允许日志平台继续工作。 */

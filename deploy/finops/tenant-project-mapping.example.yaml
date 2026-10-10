@@ -1,0 +1,10 @@
+# 仅示例，生产环境应由租户管理服务生成并通过 Secret/ConfigMap 发布。
+agent-platform:
+  finops:
+    tenant-project-mappings:
+      1001:
+        project-id: project-a
+        environment: prod
+      1002:
+        project-id: project-b
+        environment: staging

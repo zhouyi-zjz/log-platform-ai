@@ -3,7 +3,7 @@ package com.zhouyi.admin.service;
 import com.zhouyi.admin.config.FinopsIntegrationProperties;
 import com.zhouyi.admin.config.LogIngestProperties;
 import com.zhouyi.admin.domain.log.DltReplayRequest;
-import org.apache.kafka.clients.consumer.ConsumerFactory;
+import org.springframework.kafka.core.ConsumerFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.kafka.core.KafkaTemplate;
 
@@ -33,6 +33,15 @@ class DltReplayServiceTest {
                 .hasMessage("partition 和 offset 必须为非负数");
         assertThatThrownBy(() -> service.replay(
                 new DltReplayRequest("logs.raw.DLT", 0, -1, "test"), null))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("partition 和 offset 必须为非负数");
+    }
+
+    /** canonical FinOps DLT 只能重放到固定的 ai.budget.audit.v1，不允许跨业务 Topic。 */
+    @Test
+    void acceptsCanonicalFinopsDltTopicBeforeOffsetValidation() {
+        assertThatThrownBy(() -> service.replay(
+                new DltReplayRequest("ai.budget.audit.v1.DLT", -1, 1, "test"), null))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("partition 和 offset 必须为非负数");
     }

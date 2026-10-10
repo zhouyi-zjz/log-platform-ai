@@ -13,7 +13,7 @@
     "tenant.id": { "type": "string", "minLength": 1, "maxLength": 64 },
     "project.id": { "type": "string", "minLength": 1, "maxLength": 64 },
     "deployment.environment": { "type": "string", "maxLength": 64 },
-    "decision": { "type": "string", "enum": ["ALLOW", "DENY", "SHADOW_ALLOW", "SHADOW_DENY", "RELEASED", "EXPIRED", "SETTLED"] },
+    "decision": { "type": "string", "enum": ["ALLOW", "DENY", "SHADOW_ALLOW", "SHADOW_DENY", "RELEASED", "EXPIRED", "SETTLED", "UNKNOWN"] },
     "reason.code": { "type": "string", "maxLength": 128 },
     "trace.id": { "type": "string", "pattern": "^[0-9a-fA-F]{32}$" },
     "request.id": { "type": "string", "maxLength": 128 },

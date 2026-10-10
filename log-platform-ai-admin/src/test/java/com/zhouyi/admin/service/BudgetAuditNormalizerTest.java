@@ -62,4 +62,45 @@ class BudgetAuditNormalizerTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("event.type");
     }
+
+    /** canonical envelope 必须通过 ACL 映射为日志平台只读审计投影。 */
+    @Test
+    void normalizesCanonicalFinopsEnvelope() {
+        var event = normalizer.normalize("""
+                {"schemaVersion":"1.0","eventId":"decision-1","eventType":"BUDGET_DECISION",
+                 "occurredAt":"2026-10-09T00:00:00Z","tenantId":1001,"projectId":"project-a",
+                 "environment":"prod","serviceName":"agent-platform","traceId":"0123456789abcdef0123456789abcdef",
+                 "requestId":"req-1","payload":{"decision":"REJECT","reason_code":"BUDGET_EXHAUSTED","mode":"ENFORCE","policy_version":3}}
+                """);
+        assertThat(event.eventId()).isEqualTo("decision-1");
+        assertThat(event.eventType()).isEqualTo("BUDGET_DECISION");
+        assertThat(event.decision()).isEqualTo("DENY");
+        assertThat(event.tenantId()).isEqualTo("1001");
+        assertThat(event.projectId()).isEqualTo("project-a");
+    }
+
+    /** UNKNOWN 事件必须保留未知语义，不能被日志投影误报为 SETTLED。 */
+    @Test
+    void preservesUnknownSettlementState() {
+        var event = normalizer.normalize("""
+                {"schemaVersion":"1.0","eventId":"reservation-1:settlement","eventType":"UNKNOWN",
+                 "occurredAt":"2026-10-09T00:00:00Z","tenantId":1001,"projectId":"project-a",
+                 "environment":"prod","serviceName":"agent-platform","reservationId":"res-1",
+                 "payload":{"state":"UNKNOWN","usage_known":false}}
+                """);
+        assertThat(event.decision()).isEqualTo("UNKNOWN");
+    }
+
+    /** canonical payload 的敏感正文必须在 Anti-Corruption Layer 处拒绝。 */
+    @Test
+    void rejectsSensitiveCanonicalPayload() {
+        assertThatThrownBy(() -> normalizer.normalize("""
+                {"schemaVersion":"1.0","eventId":"decision-1","eventType":"BUDGET_DECISION",
+                 "occurredAt":"2026-10-09T00:00:00Z","tenantId":1001,"projectId":"project-a",
+                 "environment":"prod","serviceName":"agent-platform",
+                 "payload":{"decision":"ALLOW","prompt":"must not persist"}}
+                """))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("敏感字段");
+    }
 }
