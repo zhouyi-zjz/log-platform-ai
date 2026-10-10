@@ -24,7 +24,10 @@ spec:
               until curl -fsS http://elasticsearch:9200 >/dev/null; do sleep 5; done
               curl -fsS -X PUT http://elasticsearch:9200/_ilm/policy/logs-7d -H 'Content-Type: application/json' --data-binary @/config/ilm-policy.json
               curl -fsS -X PUT http://elasticsearch:9200/_index_template/logs-platform-template -H 'Content-Type: application/json' --data-binary @/config/logs-index-template.json
+              curl -fsS -X PUT http://elasticsearch:9200/_index_template/finops-budget-audit-template -H 'Content-Type: application/json' --data-binary @/config/finops-budget-audit-index-template.json
               curl -fsS -X PUT http://elasticsearch:9200/_data_stream/logs-platform-default || true
+              curl -fsS -X PUT http://elasticsearch:9200/finops-budget-audit-v1 || true
+              curl -fsS -X PUT http://elasticsearch:9200/logs-platform-default/_mapping -H 'Content-Type: application/json' --data-binary '{"properties":{"event.id":{"type":"keyword"}}}'
               curl -fsS http://elasticsearch:9200/_index_template/logs-platform-template
           volumeMounts:
             - name: config

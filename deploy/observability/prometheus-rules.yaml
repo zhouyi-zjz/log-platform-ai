@@ -1,0 +1,99 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: log-platform-observability
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: log-platform
+    prometheus: kube-prometheus
+spec:
+  groups:
+    - name: log-platform-ingest
+      interval: 30s
+      rules:
+        - alert: LogPlatformIngestRejected
+          expr: |
+            sum(rate(log_platform_ingest_rejected_total[5m]))
+              / clamp_min(sum(rate(log_platform_ingest_accepted_total[5m])) + sum(rate(log_platform_ingest_rejected_total[5m])), 1) > 0.05
+          for: 10m
+          labels:
+            severity: warning
+            signal: logs
+          annotations:
+            summary: 日志接入拒绝率持续升高
+            runbook: docs/operations/observability-runbook.md#ingest
+        - alert: LogPlatformBulkFailures
+          expr: sum(rate(log_platform_bulk_failures_total[5m])) > 0
+          for: 5m
+          labels:
+            severity: critical
+            signal: logs
+          annotations:
+            summary: Elasticsearch Bulk 持续失败
+            runbook: docs/operations/observability-runbook.md#elasticsearch
+    - name: log-platform-query
+      interval: 30s
+      rules:
+        - alert: LogPlatformQueryP95High
+          expr: |
+            histogram_quantile(0.95, sum by (le) (rate(log_platform_query_latency_seconds_bucket[10m]))) > 3
+          for: 10m
+          labels:
+            severity: warning
+            signal: query
+          annotations:
+            summary: 日志查询 P95 超过 3 秒
+            runbook: docs/operations/observability-runbook.md#query
+    - name: log-platform-trace
+      interval: 1m
+      rules:
+        - alert: LogPlatformTraceCompletenessLow
+          expr: |
+            sum(rate(log_platform_trace_completeness_complete_total[15m]))
+              / clamp_min(sum(rate(log_platform_trace_completeness_inspected_total[15m])), 1) < 0.99
+          for: 15m
+          labels:
+            severity: warning
+            signal: trace
+          annotations:
+            summary: Trace 关联完整率低于 99%
+            runbook: docs/operations/observability-runbook.md#trace
+        - alert: LogPlatformTempoUnavailable
+          expr: rate(log_platform_tempo_lookup_failure_total[10m]) > 0
+          for: 15m
+          labels:
+            severity: info
+            signal: trace
+          annotations:
+            summary: Tempo 联查不可用，日志查询仍保持可用
+            runbook: docs/operations/observability-runbook.md#tempo
+    - name: log-platform-finops-and-dlt
+      interval: 30s
+      rules:
+        - alert: LogPlatformFinopsAuditProjectionFailures
+          expr: rate(log_platform_finops_audit_write_failures_total[5m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+            signal: finops-audit
+          annotations:
+            summary: FinOps 预算审计只读投影持续失败
+            runbook: docs/operations/observability-runbook.md#finops-audit
+        - alert: LogPlatformDltBacklog
+          expr: log_platform_dlt_pending_records > 0
+          for: 10m
+          labels:
+            severity: warning
+            signal: dlt
+          annotations:
+            summary: DLT 存在持续积压，需要管理员分析或安全重放
+            runbook: docs/operations/observability-runbook.md#dlt
+        - alert: LogPlatformDltReplayFailures
+          expr: rate(log_platform_dlt_replay_failure_total[10m]) > 0
+          for: 5m
+          labels:
+            severity: critical
+            signal: dlt
+          annotations:
+            summary: DLT 安全重放持续失败
+            runbook: docs/operations/observability-runbook.md#dlt

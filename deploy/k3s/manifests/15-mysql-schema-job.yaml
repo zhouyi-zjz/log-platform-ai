@@ -1,0 +1,40 @@
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: mysql-schema-${DEPLOYMENT_ID}
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: mysql-schema
+spec:
+  backoffLimit: 12
+  ttlSecondsAfterFinished: 86400
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: mysql-schema
+    spec:
+      restartPolicy: OnFailure
+      containers:
+        - name: mysql-schema
+          image: ${MYSQL_IMAGE}
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-ec"]
+          args:
+            - |
+              until mysqladmin ping -h mysql -uroot --silent; do sleep 5; done
+              mysql -h mysql -uroot < /config/01-base.sql
+              mysql -h mysql -uroot < /config/02-project-token-and-audit.sql
+          env:
+            - name: MYSQL_PWD
+              valueFrom:
+                secretKeyRef:
+                  name: log-platform-db
+                  key: root-password
+          volumeMounts:
+            - name: schema
+              mountPath: /config
+              readOnly: true
+      volumes:
+        - name: schema
+          configMap:
+            name: log-platform-db-init

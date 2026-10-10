@@ -2,6 +2,7 @@ package com.zhouyi.admin.config;
 
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Primary;
 import org.springframework.util.StringUtils;
 import org.springframework.web.client.RestClient;
 import org.springframework.http.client.SimpleClientHttpRequestFactory;
@@ -11,6 +12,7 @@ import org.springframework.http.client.SimpleClientHttpRequestFactory;
 public class ElasticsearchConfiguration {
 
     @Bean
+    @Primary
     public RestClient elasticsearchRestClient(LogIngestProperties properties, LogQueryProperties queryProperties) {
         String endpoint = properties.getElasticsearchEndpoints().split(",")[0].trim();
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();

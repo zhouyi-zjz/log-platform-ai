@@ -1,0 +1,145 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: log-platform-consumer
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: log-platform-consumer
+spec:
+  replicas: ${CONSUMER_REPLICAS}
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: log-platform-consumer
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: log-platform-consumer
+    spec:
+      terminationGracePeriodSeconds: 60
+      containers:
+        - name: consumer
+          image: ${BACKEND_IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+            - name: http
+              containerPort: 8104
+          env:
+            - name: SERVER_PORT
+              value: "8104"
+            - name: SESSION_STORE_TYPE
+              value: "none"
+            - name: LOG_CONSUMER_ENABLED
+              value: "true"
+            - name: DB_URL
+              value: jdbc:mysql://mysql:3306/log-platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
+            - name: DB_USERNAME
+              value: "${DB_USERNAME}"
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: log-platform-db
+                  key: app-password
+            - name: BOOTSTRAP_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: log-platform-app
+                  key: bootstrap-admin-username
+            - name: BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: log-platform-app
+                  key: bootstrap-admin-password
+            - name: BOOTSTRAP_ADMIN_DISPLAY_NAME
+              value: "${BOOTSTRAP_ADMIN_DISPLAY_NAME}"
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: kafka:9092
+            - name: KAFKA_CONSUMER_GROUP
+              value: logs-es-writer
+            - name: LOG_KAFKA_TOPIC
+              value: logs.raw
+            - name: LOG_TOPIC_AUTO_CREATE
+              value: "false"
+            - name: LOG_TOPIC_PARTITIONS
+              value: "6"
+            - name: LOG_TOPIC_REPLICATION_FACTOR
+              value: "${KAFKA_REPLICATION_FACTOR}"
+            - name: LOG_KAFKA_ACK_TIMEOUT_MS
+              value: "5000"
+            - name: ELASTICSEARCH_ENDPOINTS
+              value: http://elasticsearch:9200
+            - name: ELASTICSEARCH_INDEX
+              value: logs-platform-default
+            - name: FINOPS_BUDGET_AUDIT_TOPIC
+              value: "${FINOPS_BUDGET_AUDIT_TOPIC}"
+            - name: FINOPS_BUDGET_AUDIT_CONSUMER_ENABLED
+              value: "${FINOPS_BUDGET_AUDIT_CONSUMER_ENABLED}"
+            - name: FINOPS_BUDGET_AUDIT_CONSUMER_GROUP
+              value: "${FINOPS_BUDGET_AUDIT_CONSUMER_GROUP}"
+            - name: FINOPS_BUDGET_AUDIT_INDEX
+              value: "${FINOPS_BUDGET_AUDIT_INDEX}"
+            - name: FINOPS_BUDGET_AUDIT_MAX_PAYLOAD_BYTES
+              value: "${FINOPS_BUDGET_AUDIT_MAX_PAYLOAD_BYTES}"
+          startupProbe:
+            tcpSocket:
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 30
+          livenessProbe:
+            tcpSocket:
+              port: http
+            initialDelaySeconds: 30
+            periodSeconds: 20
+            timeoutSeconds: 5
+          resources:
+            requests:
+              cpu: 250m
+              memory: 512Mi
+            limits:
+              cpu: "2"
+              memory: 2Gi
+---
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: log-platform-consumer
+  namespace: ${NAMESPACE}
+spec:
+  minAvailable: ${CONSUMER_REPLICAS}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: log-platform-consumer
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: log-platform-consumer
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: log-platform-consumer
+  policyTypes: ["Egress"]
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mysql
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: elasticsearch
+      ports:
+        - protocol: TCP
+          port: 3306
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9200

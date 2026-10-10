@@ -82,6 +82,9 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/monitor/api/auth/login").permitAll()
                         .requestMatchers(HttpMethod.GET, "/monitor/api/auth/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/monitor/api/logs/ingest").permitAll()
+                        .requestMatchers("/actuator/health/**").permitAll()
+                        // Prometheus 使用无状态抓取；生产通过 NetworkPolicy 只允许监控命名空间访问该端点。
+                        .requestMatchers("/actuator/prometheus").permitAll()
                         .requestMatchers("/monitor/api/admin/**").hasRole("ADMIN")
                         .requestMatchers("/monitor/**").authenticated()
                         .requestMatchers("/error").permitAll()

@@ -17,15 +17,37 @@ CREATE TABLE IF NOT EXISTS sys_user (
     UNIQUE KEY uk_sys_user_username (username)
 ) ENGINE=InnoDB COMMENT='日志平台用户';
 
--- 初始密码仅用于首次登录，部署后应立即修改。
--- admin  / admin@2024
--- viewer / viewer@2024
-INSERT INTO sys_user (username, password_hash, display_name, is_admin, enabled)
-VALUES
-    ('admin', '$2a$12$gWbnQ5VembKCJh1W1mEd0eaOGa/pwyUPw3Izrt1Iozc31y.uayq0m', '系统管理员', 1, 1),
-    ('viewer', '$2a$12$zk2aHgKG3xo.uiz3Wa6GK.Mcl1pOG0VV5uqjU.nitKfyA3txWRg9e', '日志查询用户', 0, 1)
-ON DUPLICATE KEY UPDATE
-    password_hash = VALUES(password_hash),
-    display_name = VALUES(display_name),
-    is_admin = VALUES(is_admin),
-    enabled = VALUES(enabled);
+CREATE TABLE IF NOT EXISTS log_project (
+    project_id VARCHAR(64) NOT NULL COMMENT '日志中的 project.id',
+    project_name VARCHAR(128) NOT NULL COMMENT '项目显示名称',
+    enabled TINYINT(1) NOT NULL DEFAULT 1 COMMENT '是否允许查询',
+    ingest_token_hash CHAR(64) NULL COMMENT '项目采集 Token 的 SHA-256 摘要，不保存明文',
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (project_id)
+) ENGINE=InnoDB COMMENT='日志项目';
+
+CREATE TABLE IF NOT EXISTS sys_user_project (
+    user_id BIGINT UNSIGNED NOT NULL COMMENT '用户ID',
+    project_id VARCHAR(64) NOT NULL COMMENT '项目ID',
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    PRIMARY KEY (user_id, project_id),
+    CONSTRAINT fk_user_project_user FOREIGN KEY (user_id) REFERENCES sys_user (id) ON DELETE CASCADE,
+    CONSTRAINT fk_user_project_project FOREIGN KEY (project_id) REFERENCES log_project (project_id) ON DELETE CASCADE
+) ENGINE=InnoDB COMMENT='用户项目权限';
+
+CREATE TABLE IF NOT EXISTS log_query_audit (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT COMMENT '审计记录ID',
+    username VARCHAR(64) NOT NULL COMMENT '发起查询的用户名',
+    operation VARCHAR(32) NOT NULL COMMENT '操作类型',
+    outcome VARCHAR(16) NOT NULL COMMENT '操作结果',
+    project_id VARCHAR(64) NULL COMMENT '请求指定的项目',
+    duration_ms BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '服务端耗时毫秒',
+    detail VARCHAR(512) NULL COMMENT '受限长度的结果说明，不保存日志正文',
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '审计时间',
+    PRIMARY KEY (id),
+    KEY idx_log_query_audit_created_at (created_at),
+    KEY idx_log_query_audit_username (username)
+) ENGINE=InnoDB COMMENT='日志查询审计';
+
+-- 管理员由 BOOTSTRAP_ADMIN_* Secret 在应用启动时创建或同步，SQL 中不保存默认密码。

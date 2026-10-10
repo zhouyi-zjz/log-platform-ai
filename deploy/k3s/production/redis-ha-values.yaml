@@ -1,0 +1,16 @@
+architecture: replication
+auth:
+  enabled: true
+  existingSecret: log-platform-app
+  existingSecretPasswordKey: redis-password
+replica:
+  replicaCount: 2
+sentinel:
+  enabled: true
+  masterSet: log-platform
+  quorum: 2
+metrics:
+  enabled: true
+persistence:
+  enabled: true
+  size: 20Gi

@@ -4,10 +4,14 @@
 
 - 前端 Vue 构建和 Nginx 镜像；
 - Spring Boot 后端镜像；
+- 独立的日志 API 与 Kafka/Elasticsearch Consumer Deployment；
 - MySQL 8.4 用户库；
 - Kafka 3.9.1 单节点 KRaft；
 - Elasticsearch 8.15.3 单节点和日志 Data Stream 初始化；
+- Redis 单副本 StatefulSet，用于多副本 Session 和可选的分布式查询限流；
+- 后端 PDB、HPA、NetworkPolicy 和 Actuator/Prometheus 端点；
 - 可选的 Fluent Bit DaemonSet；
+- 可选的 OpenTelemetry Collector Deployment，统一转发 Trace/Metric/Log；
 - K3s Ingress、PVC、Secret、Kafka Topic、ES ILM/索引模板和验收脚本。
 
 ## 前置条件
@@ -49,9 +53,20 @@ kubectl -n log-platform create secret tls log-platform-tls \
 
 - `DB_PASSWORD` 和 `MYSQL_ROOT_PASSWORD` 必须改成随机强密码；后端使用 `DB_USERNAME` 对应的专用账号。
 - `LOG_INGEST_TOKEN` 必须设置。空 Token 会让 HTTP 日志接入接口失去鉴权。
+  已迁移到项目独立 Token 后可清空该兼容值；独立 Token 通过管理员 API 轮换，数据库只保存摘要。
+- `BOOTSTRAP_ADMIN_USERNAME` 和 `BOOTSTRAP_ADMIN_PASSWORD` 必须使用非占位值；密码至少 12 位。
+  应用每次启动都从 Secret 创建或同步该管理员，因此旧版固定密码也会被覆盖；SQL 和镜像中不保存默认登录密码。
+- 后端在 K3s 中设置 `SESSION_STORE_TYPE=redis` 和 `LOG_QUERY_DISTRIBUTED_RATE_LIMIT=true`，会话与查询限流依赖 Redis Service；Redis 当前只有 1 个副本和 1 个 PVC，只是共享状态基线，不是 Redis HA。无 Redis 的本地开发/测试默认使用进程内 Session 和限流。
+- `/actuator/health`、`/actuator/metrics` 和 `/actuator/prometheus` 已暴露给集群内部监控；HPA 需要集群已安装 `metrics-server`，Prometheus 需要允许访问后端 8103 端口。
+- API 与 Consumer 已拆成两个 Deployment：API 的 `LOG_CONSUMER_ENABLED=false`，Consumer 使用独立副本数和无 Service 暴露的 8104 端口，二者共享 Kafka consumer group 以按分区扩展消费。
+- `deploy/observability/prometheus-rules.yaml` 提供接入拒绝率、Bulk 失败、查询 P95、Trace 完整率和 Tempo 降级告警；需要在目标 Prometheus Operator 中安装后才会生效。
+- `INSTALL_PROMETHEUS_RULES=true` 时安装上述 `PrometheusRule`；目标集群必须已有 Prometheus Operator 和 `monitoring` 命名空间，否则保持关闭并由监控团队单独应用规则。
+- `INSTALL_OTEL_COLLECTOR=true` 时会额外部署 `otel-collector` Service。Collector 只负责信号转发和尾采样，Tempo/Loki 仍需由目标观测栈提供；`OTEL_ENABLED=true` 后后端通过 OTLP HTTP 发送 Trace，Collector 或下游不可用不应阻塞日志接入。
+- 异步导出接口 `POST /monitor/api/logs/exports` 复用查询 ACL，单任务默认最多 10,000 行/50 MiB，结果在应用内存保留 30 分钟；多副本生产环境仍需迁移持久化任务队列和对象存储。
 - `KAFKA_REPLICAS=1` 和 `KAFKA_REPLICATION_FACTOR=1` 是单节点基线，脚本会拒绝其他值。生产 Kafka 集群应改用 Kafka Operator（例如 Strimzi）或经过评审的多节点 KRaft 清单，并同步调整 quorum、广告地址、副本和 ISR。
 - `ELASTICSEARCH_IMAGE` 使用单节点模式且关闭 ES 内置安全，仅适合 K3s 内网基线。生产应配置 ES TLS、认证、快照和多节点拓扑，并同步修改后端的 HTTPS/认证配置。
-- MySQL 的 [base.sql](../../sql/base.sql) 只会在空数据目录第一次初始化时执行。修改用户或 schema 后请使用数据库迁移流程，不要删除 PVC 重建生产数据。
+- 安装脚本会通过 `mysql-schema-<deployment-id>` Job 幂等执行 [base.sql](../../sql/base.sql)，
+  为已有 PVC 补充项目权限表。后续复杂迁移仍应引入 Flyway/Liquibase，不要删除生产 PVC 重建。
 - `INSTALL_FLUENT_BIT=true` 时会在每个 K3s 节点部署 DaemonSet，从节点 `/var/log/apps/*.log` 读取 JSON 并写入内部 Kafka。应用日志必须包含 `project.id`；需要采集容器 stdout 时，应根据集群日志路径另行调整 Input。
 
 ## 验收
@@ -60,10 +75,19 @@ kubectl -n log-platform create secret tls log-platform-tls \
 kubectl -n log-platform get pods,svc,ingress,pvc
 kubectl -n log-platform logs job/kafka-topic-init-<deployment-id>
 kubectl -n log-platform logs job/elasticsearch-init-<deployment-id>
+kubectl -n log-platform logs job/mysql-schema-<deployment-id>
 deploy/k3s/smoke-test.sh deploy/k3s/.env
 ```
 
-验收脚本会通过前端 Service 检查 Nginx、CSRF，并向后端提交一条 Kafka 日志。HTTP `202` 只代表 Kafka 接收成功；还应登录 UI 查询 Elasticsearch，确认消费、Bulk 写入和权限窗口均正常。
+验收脚本会通过前端 Service 检查 Nginx、CSRF，并向后端提交一条 Kafka 日志。HTTP `202`
+代表 Kafka broker 已确认消息；还应登录 UI 查询 Elasticsearch，确认消费、Bulk 写入、幂等和项目权限均正常。
+
+普通用户访问项目前，先登记项目并授权：
+
+```sql
+INSERT INTO log_project (project_id, project_name) VALUES ('billing', '计费项目');
+INSERT INTO sys_user_project (user_id, project_id) VALUES (<user-id>, 'billing');
+```
 
 ## 升级和清理
 
@@ -77,4 +101,4 @@ CONFIRM=DELETE deploy/k3s/uninstall.sh log-platform
 
 ## 生产扩展
 
-当前清单是可运行基线，不是完整高可用方案。投入生产前至少应完成：Kafka/ES 多节点和副本、加密连接、镜像签名/私有仓库、备份恢复演练、Prometheus/告警、Ingress 证书自动续期、查询限流的 Redis/网关化，以及按照 [容量模型](../../docs/capacity/log-platform-capacity-model.md) 调整 PVC 和资源请求。
+当前清单是可运行基线，不是完整高可用方案。投入生产前至少应完成：Kafka/ES 多节点和副本、加密连接、镜像签名/私有仓库、备份恢复演练、Prometheus/告警、Ingress 证书自动续期、Redis HA、导出持久化队列/对象存储，以及按照 [容量模型](../../docs/capacity/log-platform-capacity-model.md) 调整 PVC 和资源请求。

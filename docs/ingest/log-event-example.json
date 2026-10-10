@@ -1,5 +1,6 @@
 {
   "@timestamp": "2026-09-12T09:30:00.123Z",
+  "event.id": "018f6f9c-90b2-7b42-8f3a-4cfb9b0dd234",
   "project.id": "billing",
   "deployment.environment": "prod",
   "service.name": "billing-api",

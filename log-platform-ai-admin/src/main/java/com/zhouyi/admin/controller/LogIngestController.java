@@ -42,29 +42,46 @@ public class LogIngestController {
             @RequestBody JsonNode payload,
             @RequestHeader(value = "X-Log-Ingest-Token", required = false) String token) {
         try {
+            if (payload == null || !payload.isObject()) {
+                return ResponseEntity.badRequest()
+                        .body(AjaxResult.error(HttpStatus.BAD_REQUEST.value(), "日志消息必须是 JSON 对象"));
+            }
             String raw = objectMapper.writeValueAsString(payload);
             if (raw.getBytes(StandardCharsets.UTF_8).length > properties.getMaxPayloadBytes()) {
                 return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE)
                         .body(AjaxResult.error(HttpStatus.PAYLOAD_TOO_LARGE.value(), "日志消息超过大小限制"));
             }
-            if (!ingestService.isValidToken(token)) {
+            if (!ingestService.isValidToken(token, payload)) {
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED)
                         .body(AjaxResult.error(HttpStatus.UNAUTHORIZED.value(), "采集 Token 无效"));
             }
-            var future = ingestService.publish(payload);
-            // send 返回 Future，响应只表示已提交 Kafka，不代表 ES 已经写入成功。
+            var receipt = ingestService.publish(payload);
+            // 只有收到 Kafka broker ack 才返回 202；这仍不代表 ES 已完成写入。
             return ResponseEntity.status(HttpStatus.ACCEPTED)
-                    .body(AjaxResult.success("日志已提交", new IngestAccepted(
-                            properties.getKafkaTopic(), future != null)));
+                    .body(AjaxResult.success("日志已被 Kafka 确认", new IngestAccepted(
+                            receipt.eventId(), receipt.topic(), receipt.partition(), receipt.offset(), true)));
         } catch (IllegalArgumentException exception) {
             return ResponseEntity.badRequest()
                     .body(AjaxResult.error(HttpStatus.BAD_REQUEST.value(), exception.getMessage()));
+        } catch (LogIngestService.LogPublishException exception) {
+            return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                    .body(AjaxResult.error(HttpStatus.SERVICE_UNAVAILABLE.value(), "Kafka 暂时无法确认日志"));
         } catch (Exception exception) {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(AjaxResult.error(HttpStatus.SERVICE_UNAVAILABLE.value(), "日志暂时无法接收"));
         }
     }
 
-    public record IngestAccepted(String topic, boolean accepted) {
+    public record IngestAccepted(
+            /** 平台补齐或沿用的事件 ID。 */
+            String eventId,
+            /** Kafka Topic。 */
+            String topic,
+            /** Kafka 分区。 */
+            int partition,
+            /** Kafka offset。 */
+            long offset,
+            /** 是否收到 broker ack。 */
+            boolean accepted) {
     }
 }

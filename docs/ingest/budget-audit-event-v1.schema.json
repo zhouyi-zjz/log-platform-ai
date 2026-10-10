@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://log-platform.example/schemas/finops/budget-audit-event-v1.json",
+  "title": "FinOps Budget Audit Event v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema.version", "event.id", "event.type", "event.occurred_at", "tenant.id", "project.id", "decision"],
+  "properties": {
+    "schema.version": { "const": "1" },
+    "event.id": { "type": "string", "minLength": 1, "maxLength": 256 },
+    "event.type": { "type": "string", "enum": ["BUDGET_DECISION", "RESERVATION_CREATED", "RESERVATION_RELEASED", "RESERVATION_EXPIRED", "SETTLEMENT_RECORDED"] },
+    "event.occurred_at": { "type": "string", "format": "date-time" },
+    "tenant.id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "project.id": { "type": "string", "minLength": 1, "maxLength": 64 },
+    "deployment.environment": { "type": "string", "maxLength": 64 },
+    "decision": { "type": "string", "enum": ["ALLOW", "DENY", "SHADOW_ALLOW", "SHADOW_DENY", "RELEASED", "EXPIRED", "SETTLED"] },
+    "reason.code": { "type": "string", "maxLength": 128 },
+    "trace.id": { "type": "string", "pattern": "^[0-9a-fA-F]{32}$" },
+    "request.id": { "type": "string", "maxLength": 128 },
+    "run.id": { "type": "string", "maxLength": 128 },
+    "reservation.id": { "type": "string", "maxLength": 128 },
+    "budget.policy.id": { "type": "string", "maxLength": 128 },
+    "amount.micros": { "type": "integer", "minimum": 0 },
+    "currency": { "type": "string", "pattern": "^[A-Z]{3}$" }
+  },
+  "not": {
+    "anyOf": [
+      { "required": ["prompt"] },
+      { "required": ["completion"] },
+      { "required": ["messages"] },
+      { "required": ["tool.arguments"] },
+      { "required": ["credentials"] }
+    ]
+  }
+}

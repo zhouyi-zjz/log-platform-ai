@@ -1,0 +1,33 @@
+{
+  "index_patterns": ["finops-budget-audit-v1*"],
+  "priority": 210,
+  "template": {
+    "settings": {
+      "index.lifecycle.name": "logs-7d"
+    },
+    "mappings": {
+      "dynamic": false,
+      "properties": {
+        "@timestamp": { "type": "date" },
+        "event.ingested": { "type": "date" },
+        "event.id": { "type": "keyword" },
+        "event.channel": { "type": "keyword" },
+        "event.type": { "type": "keyword" },
+        "schema.version": { "type": "keyword" },
+        "tenant.id": { "type": "keyword" },
+        "project.id": { "type": "keyword" },
+        "deployment.environment": { "type": "keyword" },
+        "decision": { "type": "keyword" },
+        "reason.code": { "type": "keyword" },
+        "trace.id": { "type": "keyword" },
+        "request.id": { "type": "keyword" },
+        "run.id": { "type": "keyword" },
+        "reservation.id": { "type": "keyword" },
+        "budget.policy.id": { "type": "keyword" },
+        "amount.micros": { "type": "long" },
+        "currency": { "type": "keyword" },
+        "log.kind": { "type": "keyword" }
+      }
+    }
+  }
+}

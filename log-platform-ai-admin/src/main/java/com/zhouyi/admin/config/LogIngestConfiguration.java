@@ -50,10 +50,14 @@ public class LogIngestConfiguration {
 
     @Bean
     public ConsumerFactory<String, String> logConsumerFactory(
-            org.springframework.boot.autoconfigure.kafka.KafkaProperties kafkaProperties) {
+            org.springframework.boot.autoconfigure.kafka.KafkaProperties kafkaProperties,
+            LogIngestProperties ingestProperties) {
         Map<String, Object> properties = new HashMap<>(kafkaProperties.buildConsumerProperties());
         properties.putIfAbsent(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         properties.putIfAbsent(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
+        // 让 Bulk 的动作上限真正约束单次 poll，避免配置写了 1000 条而客户端仍按默认值取数。
+        properties.putIfAbsent(ConsumerConfig.MAX_POLL_RECORDS_CONFIG,
+                Math.max(1, ingestProperties.getBulkMaxActions()));
         return new DefaultKafkaConsumerFactory<>(properties);
     }
 
@@ -69,13 +73,16 @@ public class LogIngestConfiguration {
     @Bean(name = "logKafkaListenerContainerFactory")
     public ConcurrentKafkaListenerContainerFactory<String, String> logKafkaListenerContainerFactory(
             ConsumerFactory<String, String> consumerFactory,
-            CommonErrorHandler logKafkaErrorHandler) {
+            CommonErrorHandler logKafkaErrorHandler,
+            LogIngestProperties properties) {
         ConcurrentKafkaListenerContainerFactory<String, String> factory =
                 new ConcurrentKafkaListenerContainerFactory<>();
         factory.setConsumerFactory(consumerFactory);
         // 批量消费可以显著减少 ES Bulk 请求数量；一批中任意消息失败时整批重试。
         factory.setBatchListener(true);
         factory.setCommonErrorHandler(logKafkaErrorHandler);
+        factory.setConcurrency(1);
+        factory.getContainerProperties().setIdleBetweenPolls(Math.max(0, properties.getBulkFlushIntervalMs()));
         return factory;
     }
 
@@ -92,5 +99,23 @@ public class LogIngestConfiguration {
     public NewTopic logDeadLetterTopic(LogIngestProperties properties) {
         return new NewTopic(properties.getKafkaTopic() + ".DLT", properties.getTopicPartitions(),
                 properties.getTopicReplicationFactor());
+    }
+
+    /** 创建预算审计主 Topic，生产环境也可由 Kafka Operator 预先管理。 */
+    @Bean
+    @ConditionalOnProperty(prefix = "log-platform.ingest", name = "topic-auto-create", havingValue = "true")
+    public NewTopic finopsBudgetAuditTopic(FinopsIntegrationProperties properties,
+                                           LogIngestProperties ingestProperties) {
+        return new NewTopic(properties.getBudgetAuditTopic(), ingestProperties.getTopicPartitions(),
+                ingestProperties.getTopicReplicationFactor());
+    }
+
+    /** 创建预算审计 DLT，复用 Kafka 错误处理器的 topic + .DLT 约定。 */
+    @Bean
+    @ConditionalOnProperty(prefix = "log-platform.ingest", name = "topic-auto-create", havingValue = "true")
+    public NewTopic finopsBudgetAuditDeadLetterTopic(FinopsIntegrationProperties properties,
+                                                     LogIngestProperties ingestProperties) {
+        return new NewTopic(properties.getBudgetAuditTopic() + ".DLT", ingestProperties.getTopicPartitions(),
+                ingestProperties.getTopicReplicationFactor());
     }
 }

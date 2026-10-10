@@ -1,0 +1,86 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: log-platform-backend
+  namespace: ${NAMESPACE}
+spec:
+  minAvailable: ${BACKEND_MIN_AVAILABLE}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: log-platform-backend
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: log-platform-backend
+  namespace: ${NAMESPACE}
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: log-platform-backend
+  minReplicas: ${BACKEND_REPLICAS}
+  maxReplicas: ${BACKEND_MAX_REPLICAS}
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+    scaleDown:
+      stabilizationWindowSeconds: 300
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          averageUtilization: 75
+---
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: log-platform-backend
+  namespace: ${NAMESPACE}
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: log-platform-backend
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: log-platform-frontend
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8103
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: mysql
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: kafka
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: elasticsearch
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: redis
+      ports:
+        - protocol: TCP
+          port: 3306
+        - protocol: TCP
+          port: 9092
+        - protocol: TCP
+          port: 9200
+        - protocol: TCP
+          port: 6379

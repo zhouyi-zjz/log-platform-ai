@@ -1,3 +1,5 @@
+DROP TABLE IF EXISTS sys_user_project;
+DROP TABLE IF EXISTS log_project;
 DROP TABLE IF EXISTS sys_user;
 
 CREATE TABLE sys_user (
@@ -9,4 +11,33 @@ CREATE TABLE sys_user (
     enabled TINYINT NOT NULL DEFAULT 1,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE log_project (
+    project_id VARCHAR(64) PRIMARY KEY,
+    project_name VARCHAR(128) NOT NULL,
+    enabled TINYINT NOT NULL DEFAULT 1,
+    ingest_token_hash VARCHAR(64),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE sys_user_project (
+    user_id BIGINT NOT NULL,
+    project_id VARCHAR(64) NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    PRIMARY KEY (user_id, project_id),
+    FOREIGN KEY (user_id) REFERENCES sys_user (id) ON DELETE CASCADE,
+    FOREIGN KEY (project_id) REFERENCES log_project (project_id) ON DELETE CASCADE
+);
+
+CREATE TABLE log_query_audit (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    username VARCHAR(64) NOT NULL,
+    operation VARCHAR(32) NOT NULL,
+    outcome VARCHAR(16) NOT NULL,
+    project_id VARCHAR(64),
+    duration_ms BIGINT NOT NULL DEFAULT 0,
+    detail VARCHAR(512),
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );

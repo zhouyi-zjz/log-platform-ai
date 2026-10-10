@@ -1,5 +1,5 @@
-# OpenTelemetry Collector 可选配置：把应用 OTLP Trace 转发到 SkyWalking OAP。
-# 生产环境建议再补 metrics/logs pipeline，并通过 Secret 管理证书和认证参数。
+# OpenTelemetry Collector 统一信号管线：Trace -> Tempo，Metric -> Prometheus，Log -> Loki。
+# 应用侧只允许发送受控元数据；所有下游不可用都由 Collector 队列和 fail-open 策略隔离。
 receivers:
   otlp:
     protocols:
@@ -16,17 +16,68 @@ processors:
   batch:
     send_batch_size: 512
     timeout: 1s
+  tail_sampling:
+    decision_wait: 10s
+    num_traces: 50000
+    expected_new_traces_per_sec: 100
+    policies:
+      - name: errors
+        type: status_code
+        status_code:
+          status_codes: [ERROR]
+      - name: slow
+        type: latency
+        latency:
+          threshold_ms: 1000
+      - name: baseline
+        type: probabilistic
+        probabilistic:
+          sampling_percentage: 10
 
 exporters:
-  otlp/skywalking:
-    endpoint: ${env:SKYWALKING_OAP_OTLP_ENDPOINT}
+  otlp/tempo:
+    endpoint: ${env:TEMPO_OTLP_ENDPOINT}
     tls:
-      # OAP 使用 TLS 时改为 false，并配置 ca_file/cert_file/key_file。
+      # Tempo 使用 TLS 时改为 false，并配置 ca_file/cert_file/key_file。
       insecure: true
+    sending_queue:
+      enabled: true
+      queue_size: 2048
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 10s
+      max_elapsed_time: 30s
+  prometheus:
+    endpoint: 0.0.0.0:8889
+    enable_open_metrics: true
+  loki:
+    endpoint: ${env:LOKI_PUSH_ENDPOINT}
+    sending_queue:
+      enabled: true
+      queue_size: 2048
+    retry_on_failure:
+      enabled: true
+      initial_interval: 1s
+      max_interval: 10s
+      max_elapsed_time: 30s
+
+extensions:
+  health_check:
+    endpoint: 0.0.0.0:13133
 
 service:
+  extensions: [health_check]
   pipelines:
     traces:
       receivers: [otlp]
+      processors: [memory_limiter, tail_sampling, batch]
+      exporters: [otlp/tempo]
+    metrics:
+      receivers: [otlp]
       processors: [memory_limiter, batch]
-      exporters: [otlp/skywalking]
+      exporters: [prometheus]
+    logs:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [loki]

@@ -24,4 +24,6 @@ spec:
               until /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --list >/dev/null 2>&1; do sleep 5; done
               /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic logs.raw --partitions 6 --replication-factor ${KAFKA_REPLICATION_FACTOR}
               /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic logs.raw.DLT --partitions 6 --replication-factor ${KAFKA_REPLICATION_FACTOR}
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic ${FINOPS_BUDGET_AUDIT_TOPIC} --partitions 6 --replication-factor ${KAFKA_REPLICATION_FACTOR}
+              /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --create --if-not-exists --topic ${FINOPS_BUDGET_AUDIT_TOPIC}.DLT --partitions 6 --replication-factor ${KAFKA_REPLICATION_FACTOR}
               /opt/kafka/bin/kafka-topics.sh --bootstrap-server kafka:9092 --describe --topic logs.raw

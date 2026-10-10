@@ -8,9 +8,41 @@ server:
         same-site: lax
         secure: ${SESSION_COOKIE_SECURE:false}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+  tracing:
+    # OpenTelemetry 默认关闭，启用后由 SDK 异步发送到 Collector，业务链路保持 fail-open。
+    enabled: ${OTEL_ENABLED:false}
+    sampling:
+      probability: ${OTEL_SAMPLING_PROBABILITY:0.1}
+    propagation:
+      type: w3c
+  otlp:
+    tracing:
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
 spring:
   application:
     name: log-platform-ai
+  session:
+    # none 使用显式内存 Session；多副本 K3s 通过 SESSION_STORE_TYPE=redis 切换 Redis。
+    store-type: ${SESSION_STORE_TYPE:none}
+    timeout: ${SESSION_TIMEOUT:30m}
+    redis:
+      namespace: ${SESSION_REDIS_NAMESPACE:log-platform:session}
+  data:
+    redis:
+      url: ${REDIS_URL:redis://localhost:6379}
   kafka:
     # 本地开发默认连接 localhost；生产环境请通过环境变量覆盖，并开启 SASL/TLS。
     bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
@@ -27,9 +59,9 @@ spring:
       properties:
         isolation.level: read_committed
   datasource:
-    url: ${DB_URL:jdbc:mysql://8.138.166.208:33036/log-platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai}
-    username: ${DB_USERNAME:root}
-    password: ${DB_PASSWORD:hgai5350}
+    url: ${DB_URL}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
 
   sql:
@@ -39,6 +71,27 @@ spring:
 # 日志平台采集链路配置。采集器直写 Kafka 时只需关注 kafka-topic；
 # 无法使用 Kafka 输出插件的项目可以 POST 到 /monitor/api/logs/ingest。
 log-platform:
+  tempo:
+    # Trace 联查默认关闭；开启后只读取 Tempo，不改变日志权限和 FinOps 行为。
+    enabled: ${TEMPO_QUERY_ENABLED:false}
+    endpoint: ${TEMPO_QUERY_ENDPOINT:http://localhost:3200}
+    timeout-ms: ${TEMPO_QUERY_TIMEOUT_MS:3000}
+  finops:
+    # 日志平台不拥有 Token、成本或预算账本；正式切换前保持 DISABLED/SHADOW。
+    mode: ${FINOPS_INTEGRATION_MODE:DISABLED}
+    usage-topic: ${FINOPS_USAGE_TOPIC:finops.usage.v1}
+    budget-audit-topic: ${FINOPS_BUDGET_AUDIT_TOPIC:finops.budget-audit.v1}
+    timeout-ms: ${FINOPS_TIMEOUT_MS:500}
+    fail-open: ${FINOPS_FAIL_OPEN:true}
+    metadata-only: ${FINOPS_METADATA_ONLY:true}
+    budget-audit-consumer-enabled: ${FINOPS_BUDGET_AUDIT_CONSUMER_ENABLED:false}
+    budget-audit-consumer-group: ${FINOPS_BUDGET_AUDIT_CONSUMER_GROUP:log-platform-budget-audit}
+    budget-audit-index: ${FINOPS_BUDGET_AUDIT_INDEX:finops-budget-audit-v1}
+    budget-audit-max-payload-bytes: ${FINOPS_BUDGET_AUDIT_MAX_PAYLOAD_BYTES:65536}
+  bootstrap-admin:
+    username: ${BOOTSTRAP_ADMIN_USERNAME:}
+    password: ${BOOTSTRAP_ADMIN_PASSWORD:}
+    display-name: ${BOOTSTRAP_ADMIN_DISPLAY_NAME:系统管理员}
   ingest:
     kafka-topic: ${LOG_KAFKA_TOPIC:logs.raw}
     topic-auto-create: ${LOG_TOPIC_AUTO_CREATE:false}
@@ -48,6 +101,7 @@ log-platform:
     consumer-enabled: ${LOG_CONSUMER_ENABLED:false}
     max-payload-bytes: ${LOG_MAX_PAYLOAD_BYTES:1048576}
     api-token: ${LOG_INGEST_TOKEN:}
+    kafka-ack-timeout-ms: ${LOG_KAFKA_ACK_TIMEOUT_MS:5000}
     elasticsearch-endpoints: ${ELASTICSEARCH_ENDPOINTS:http://localhost:9200}
     elasticsearch-index: ${ELASTICSEARCH_INDEX:logs-platform-default}
     elasticsearch-username: ${ELASTICSEARCH_USERNAME:}
@@ -62,5 +116,12 @@ log-platform:
     read-timeout-ms: ${LOG_QUERY_READ_TIMEOUT_MS:5000}
     admin-max-hours: ${LOG_QUERY_ADMIN_MAX_HOURS:168}
     rate-limit-per-minute: ${LOG_QUERY_RATE_LIMIT_PER_MINUTE:120}
+    distributed-rate-limit: ${LOG_QUERY_DISTRIBUTED_RATE_LIMIT:false}
     max-concurrent: ${LOG_QUERY_MAX_CONCURRENT:20}
     max-context-size: ${LOG_QUERY_MAX_CONTEXT_SIZE:100}
+    export-max-rows: ${LOG_EXPORT_MAX_ROWS:10000}
+    export-max-bytes: ${LOG_EXPORT_MAX_BYTES:52428800}
+    export-retention-minutes: ${LOG_EXPORT_RETENTION_MINUTES:30}
+    export-cleanup-interval-ms: ${LOG_EXPORT_CLEANUP_INTERVAL_MS:60000}
+    export-worker-threads: ${LOG_EXPORT_WORKER_THREADS:2}
+    export-queue-capacity: ${LOG_EXPORT_QUEUE_CAPACITY:20}

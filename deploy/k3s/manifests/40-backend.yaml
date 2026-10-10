@@ -45,6 +45,15 @@ spec:
               value: "8103"
             - name: SESSION_COOKIE_SECURE
               value: "${SESSION_COOKIE_SECURE}"
+            - name: SESSION_STORE_TYPE
+              value: "redis"
+            - name: LOG_QUERY_DISTRIBUTED_RATE_LIMIT
+              value: "true"
+            - name: REDIS_URL
+              valueFrom:
+                secretKeyRef:
+                  name: log-platform-app
+                  key: redis-url
             - name: DB_URL
               value: jdbc:mysql://mysql:3306/log-platform?useUnicode=true&characterEncoding=utf8&serverTimezone=Asia/Shanghai
             - name: DB_USERNAME
@@ -54,6 +63,18 @@ spec:
                 secretKeyRef:
                   name: log-platform-db
                   key: app-password
+            - name: BOOTSTRAP_ADMIN_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: log-platform-app
+                  key: bootstrap-admin-username
+            - name: BOOTSTRAP_ADMIN_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: log-platform-app
+                  key: bootstrap-admin-password
+            - name: BOOTSTRAP_ADMIN_DISPLAY_NAME
+              value: "${BOOTSTRAP_ADMIN_DISPLAY_NAME}"
             - name: KAFKA_BOOTSTRAP_SERVERS
               value: kafka:9092
             - name: KAFKA_CONSUMER_GROUP
@@ -61,7 +82,7 @@ spec:
             - name: LOG_KAFKA_TOPIC
               value: logs.raw
             - name: LOG_CONSUMER_ENABLED
-              value: "true"
+              value: "false"
             - name: LOG_TOPIC_AUTO_CREATE
               value: "false"
             - name: LOG_TOPIC_PARTITIONS
@@ -73,10 +94,32 @@ spec:
                 secretKeyRef:
                   name: log-platform-app
                   key: ingest-token
+            - name: LOG_KAFKA_ACK_TIMEOUT_MS
+              value: "5000"
             - name: ELASTICSEARCH_ENDPOINTS
               value: http://elasticsearch:9200
             - name: ELASTICSEARCH_INDEX
               value: logs-platform-default
+            - name: OTEL_ENABLED
+              value: "${OTEL_ENABLED}"
+            - name: OTEL_EXPORTER_OTLP_ENDPOINT
+              value: "${OTEL_EXPORTER_OTLP_ENDPOINT}"
+            - name: TEMPO_QUERY_ENABLED
+              value: "${TEMPO_QUERY_ENABLED}"
+            - name: TEMPO_QUERY_ENDPOINT
+              value: "${TEMPO_QUERY_ENDPOINT}"
+            - name: TEMPO_QUERY_TIMEOUT_MS
+              value: "${TEMPO_QUERY_TIMEOUT_MS}"
+            - name: FINOPS_BUDGET_AUDIT_TOPIC
+              value: "${FINOPS_BUDGET_AUDIT_TOPIC}"
+            - name: FINOPS_BUDGET_AUDIT_CONSUMER_ENABLED
+              value: "false"
+            - name: FINOPS_BUDGET_AUDIT_CONSUMER_GROUP
+              value: "${FINOPS_BUDGET_AUDIT_CONSUMER_GROUP}"
+            - name: FINOPS_BUDGET_AUDIT_INDEX
+              value: "${FINOPS_BUDGET_AUDIT_INDEX}"
+            - name: FINOPS_BUDGET_AUDIT_MAX_PAYLOAD_BYTES
+              value: "${FINOPS_BUDGET_AUDIT_MAX_PAYLOAD_BYTES}"
           startupProbe:
             tcpSocket:
               port: http

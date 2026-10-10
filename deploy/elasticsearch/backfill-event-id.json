@@ -1,0 +1,15 @@
+{
+  "script": {
+    "lang": "painless",
+    "source": "if (ctx._source['event.id'] == null) { ctx._source['event.id'] = ctx._id }"
+  },
+  "query": {
+    "bool": {
+      "must_not": {
+        "exists": {
+          "field": "event.id"
+        }
+      }
+    }
+  }
+}

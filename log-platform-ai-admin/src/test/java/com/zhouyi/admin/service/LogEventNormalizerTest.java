@@ -18,6 +18,7 @@ class LogEventNormalizerTest {
                   "@timestamp":"2026-09-12T09:30:00Z",
                   "project.id":"billing",
                   "service.name":"billing-api",
+                  "request.id":"req-1",
                   "http.method":"POST",
                   "http.status_code":504,
                   "attributes":{"retry.count":2},
@@ -26,6 +27,8 @@ class LogEventNormalizerTest {
                 """);
 
         assertThat(event.projectId()).isEqualTo("billing");
+        assertThat(event.requestId()).isEqualTo("req-1");
+        assertThat(event.eventId()).isNotBlank();
         assertThat(event.timestamp().toString()).isEqualTo("2026-09-12T09:30:00Z");
         assertThat(event.http()).containsEntry("method", "POST").containsEntry("status_code", 504);
         assertThat(event.attributes()).containsEntry("retry.count", 2);
@@ -37,5 +40,23 @@ class LogEventNormalizerTest {
         assertThatThrownBy(() -> normalizer.normalize("{\"message\":\"missing project\"}"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessage("project.id 不能为空");
+    }
+
+    @Test
+    void usesKafkaCoordinateAsStableFallbackEventId() {
+        var event = normalizer.normalize("""
+                {"project.id":"billing","message":"created"}
+                """, "kafka:logs.raw:2:42");
+
+        assertThat(event.eventId()).isEqualTo("kafka:logs.raw:2:42");
+    }
+
+    @Test
+    void preservesProducerEventId() {
+        var event = normalizer.normalize("""
+                {"event.id":"producer-123","project.id":"billing"}
+                """, "kafka:logs.raw:2:42");
+
+        assertThat(event.eventId()).isEqualTo("producer-123");
     }
 }

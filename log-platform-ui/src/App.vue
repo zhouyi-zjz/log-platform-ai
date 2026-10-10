@@ -81,9 +81,10 @@
       <nav aria-label="主菜单">
         <p>工作台</p>
         <button class="nav-item active"><Search /><span>日志查询</span></button>
-        <button class="nav-item disabled" disabled><ChartNoAxesCombined /><span>日志分析</span><em>即将上线</em></button>
+        <button class="nav-item" type="button" @click="scrollToAnalysis"><ChartNoAxesCombined /><span>日志分析</span></button>
         <p>管理</p>
-        <button class="nav-item disabled" disabled><BellRing /><span>告警规则</span></button>
+          <button class="nav-item" type="button" @click="scrollToTrace"><GitBranch /><span>Trace 视图</span></button>
+          <button class="nav-item disabled" disabled><BellRing /><span>告警规则</span></button>
         <button class="nav-item disabled" disabled><Settings /><span>平台设置</span></button>
       </nav>
       <div class="sidebar-foot">
@@ -177,6 +178,29 @@
             </div>
           </div>
 
+          <section v-if="searched" class="analysis-panel" aria-label="日志分析摘要">
+            <header class="analysis-head">
+              <div><h3><ChartNoAxesCombined />日志分析</h3><span>当前筛选条件下的 Top 分布</span></div>
+              <span v-if="analysisLoading" class="analysis-state">分析中...</span>
+              <span v-else-if="analysisError" class="analysis-state is-error">暂不可用</span>
+              <span v-else class="analysis-state">{{ analysisCards.length ? '已更新' : '暂无数据' }}</span>
+            </header>
+            <div v-if="analysisError" class="analysis-error"><CircleAlert /><span>{{ analysisError }}</span></div>
+            <div v-else class="analysis-grid">
+              <article v-for="card in analysisCards" :key="card.field" class="analysis-card">
+                <div class="analysis-card-title"><strong>{{ card.label }}</strong><span>{{ card.total }} 项</span></div>
+                <div v-if="card.items.length" class="analysis-bars">
+                  <div v-for="item in card.items" :key="item.key" class="analysis-bar-row">
+                    <span :title="item.key">{{ item.key }}</span>
+                    <div><i :style="{ width: `${item.percent}%` }"></i></div>
+                    <b>{{ item.count }}</b>
+                  </div>
+                </div>
+                <p v-else class="analysis-empty">暂无聚合结果</p>
+              </article>
+            </div>
+          </section>
+
           <div v-if="searchError" class="result-error" role="alert">
             <CircleAlert /><div><strong>查询未完成</strong><span>{{ searchError }}</span></div><el-button @click="runSearch(true)">重试</el-button>
           </div>
@@ -223,8 +247,39 @@
           <div><span>日志索引</span><strong>{{ selectedRow.index }}</strong></div>
           <div><span>文档 ID</span><strong>{{ selectedRow.id }}</strong></div>
         </div>
+        <section class="detail-actions">
+          <el-button :loading="detailLoading" @click="loadContext"><RefreshCw />加载上下文</el-button>
+          <el-button v-if="selectedRow.traceId" :loading="traceLoading" @click="loadTrace"><GitBranch />查看 Trace</el-button>
+          <span v-if="detailError" class="detail-error">{{ detailError }}</span>
+        </section>
         <section><h3>日志内容</h3><pre>{{ selectedRow.message }}</pre></section>
+        <section v-if="contextRows.length"><h3>关联上下文（{{ contextRows.length }} 条）</h3><div class="context-list"><button v-for="item in contextRows" :key="item.id" type="button" @click="selectContext(item)"><time>{{ formatTimestamp(item.timestamp) }}</time><span :class="['level-tag', `level-${item.level.toLowerCase()}`]">{{ item.level }}</span><span>{{ item.message }}</span></button></div></section>
         <section><div class="section-title"><h3>原始字段</h3><button title="复制 JSON" @click="copySource(selectedRow.source)"><Copy /></button></div><pre class="json-block">{{ JSON.stringify(selectedRow.source, null, 2) }}</pre></section>
+      </div>
+    </el-drawer>
+
+    <el-drawer v-model="traceOpen" size="min(860px, 96vw)" :with-header="false" destroy-on-close>
+      <div class="trace-drawer">
+        <header><div><span class="eyebrow">TRACE CORRELATION</span><h2>链路视图</h2></div><button title="关闭" @click="traceOpen = false"><X /></button></header>
+        <div class="trace-summary">
+          <div><span>Trace ID</span><strong>{{ traceData?.traceId || selectedRow?.traceId }}</strong></div>
+          <div><span>关联日志</span><strong>{{ traceData?.logs?.items?.length || 0 }} 条</strong></div>
+          <div><span>Span</span><strong>{{ traceSpans.length }} 个</strong></div>
+        </div>
+        <p v-if="traceError" class="detail-error">{{ traceError }}</p>
+        <div v-if="traceLoading" class="trace-loading">正在加载 Trace...</div>
+        <section v-else-if="traceSpans.length" class="trace-waterfall" aria-label="Trace 瀑布图">
+          <div v-for="span in traceSpans" :key="span.id" class="trace-span-row">
+            <div class="trace-span-label"><strong>{{ span.name }}</strong><small>{{ span.service || 'unknown-service' }}</small></div>
+            <div class="trace-span-track"><i :style="{ left: `${span.left}%`, width: `${span.width}%` }"></i></div>
+            <time>{{ span.durationMs }} ms</time>
+          </div>
+        </section>
+        <div v-else class="empty-state"><div><GitBranch /></div><h3>暂无 Tempo Span</h3><p>请确认 OTel Collector 与 Tempo 已启用并完成联调。</p></div>
+        <section v-if="traceData?.logs?.items?.length" class="trace-log-list">
+          <h3>关联日志</h3>
+          <button v-for="item in traceData.logs.items" :key="item.id" type="button" @click="selectContext(normalizeLog(item))"><time>{{ formatTimestamp(item.source?.['@timestamp']) }}</time><span>{{ item.source?.message || '日志事件' }}</span></button>
+        </section>
       </div>
     </el-drawer>
   </div>
@@ -234,11 +289,11 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage } from 'element-plus'
 import {
-  ArrowRight, BellRing, ChartNoAxesCombined, ChevronDown, ChevronLeft, ChevronRight,
+  ArrowRight, BellRing, ChartNoAxesCombined, ChevronDown, ChevronLeft, ChevronRight, GitBranch,
   CircleAlert, CircleHelp, Copy, FileSearch, LockKeyhole, LogOut, Menu, RefreshCw,
   RotateCcw, Search, Settings, ShieldCheck, SlidersHorizontal, UserRound, X
 } from 'lucide-vue-next'
-import { ensureCsrf, getCurrentUser, login, logout, searchLogs } from '@/api/platform'
+import { aggregateLogs, ensureCsrf, getCurrentUser, getLogContext, getLogDetail, getTraceCorrelation, login, logout, searchLogs } from '@/api/platform'
 
 const booting = ref(true)
 const user = ref(null)
@@ -258,6 +313,17 @@ const cursors = ref([null])
 const nextCursor = ref(null)
 const detailOpen = ref(false)
 const selectedRow = ref(null)
+const detailLoading = ref(false)
+const detailError = ref('')
+const contextRows = ref([])
+const traceOpen = ref(false)
+const traceLoading = ref(false)
+const traceError = ref('')
+const traceData = ref(null)
+const analysisLoading = ref(false)
+const analysisError = ref('')
+const analysisCards = ref([])
+let analysisRequestId = 0
 
 const loginForm = reactive({ username: '', password: '' })
 const signalLines = [
@@ -337,6 +403,9 @@ function compact(object) {
 
 async function runSearch(showFeedback = false) {
   if (!user.value) return
+  analysisRequestId += 1
+  analysisCards.value = []
+  analysisError.value = ''
   searchLoading.value = true
   searchError.value = ''
   const started = performance.now()
@@ -347,6 +416,7 @@ async function runSearch(showFeedback = false) {
     nextCursor.value = result.nextSearchAfter || null
     duration.value = Math.max(1, Math.round(performance.now() - started))
     searched.value = true
+    loadAnalysis()
     if (showFeedback) ElMessage.success('日志已刷新')
   } catch (error) {
     if (error.status === 401) {
@@ -359,6 +429,59 @@ async function runSearch(showFeedback = false) {
   } finally {
     searchLoading.value = false
   }
+}
+
+/** 调用白名单聚合接口生成分析摘要，聚合失败不影响主查询结果。 */
+async function loadAnalysis() {
+  if (!user.value) return
+  const requestId = ++analysisRequestId
+  analysisLoading.value = true
+  analysisError.value = ''
+  const query = buildQuery(null)
+  delete query.searchAfter
+  const dimensions = [
+    { field: 'log.level', label: '日志级别' },
+    { field: 'service.name', label: '服务名称' },
+    { field: 'deployment.environment', label: '部署环境' }
+  ]
+  try {
+    const results = await Promise.all(dimensions.map(async (dimension) => {
+      const response = await aggregateLogs(query, [dimension.field], 5)
+      const buckets = response?.aggregations?.groups?.buckets || []
+      return {
+        ...dimension,
+        total: buckets.length,
+        items: buckets.map((bucket) => ({
+          key: bucket.key_as_string ?? String(bucket.key ?? '未设置'),
+          count: bucket.doc_count || 0
+        }))
+      }
+    }))
+    if (requestId !== analysisRequestId) return
+    analysisCards.value = results.map((card) => {
+      const max = Math.max(1, ...card.items.map((item) => item.count))
+      return { ...card, items: card.items.map((item) => ({ ...item, percent: Math.max(4, Math.round(item.count / max * 100)) })) }
+    })
+  } catch (error) {
+    if (requestId === analysisRequestId) {
+      analysisCards.value = []
+      analysisError.value = error.message || '聚合查询失败'
+    }
+  } finally {
+    if (requestId === analysisRequestId) analysisLoading.value = false
+  }
+}
+
+/** 从侧边栏定位到当前结果页的分析摘要。 */
+function scrollToAnalysis() {
+  document.querySelector('.analysis-panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+/** 从侧边栏定位到最近一次链路视图。 */
+function scrollToTrace() {
+  if (selectedRow.value?.traceId) loadTrace()
+  else ElMessage.info('请先打开包含 Trace ID 的日志详情')
+  mobileMenu.value = false
 }
 
 function normalizeLog(hit) {
@@ -405,10 +528,114 @@ function filterByTrace(traceId) {
   submitSearch()
 }
 
-function openDetail(row) {
+async function openDetail(row) {
   selectedRow.value = row
+  contextRows.value = []
+  detailError.value = ''
   detailOpen.value = true
+  detailLoading.value = true
+  try {
+    const detail = await getLogDetail(row.id)
+    selectedRow.value = normalizeLog(detail)
+  } catch (error) {
+    detailError.value = error.message
+  } finally {
+    detailLoading.value = false
+  }
 }
+
+/** 请求服务端上下文，并将结果转换为与列表相同的展示模型。 */
+async function loadContext() {
+  if (!selectedRow.value) return
+  detailLoading.value = true
+  detailError.value = ''
+  try {
+    const result = await getLogContext(selectedRow.value.id, {
+      timestamp: selectedRow.value.timestamp,
+      traceId: selectedRow.value.traceId || undefined,
+      serviceName: selectedRow.value.service || undefined,
+      beforeSeconds: 30,
+      afterSeconds: 30
+    })
+    contextRows.value = (result.items || []).map(normalizeLog)
+  } catch (error) {
+    detailError.value = error.message
+  } finally {
+    detailLoading.value = false
+  }
+}
+
+/** 从上下文列表切换到目标日志，保持同一个详情抽屉。 */
+function selectContext(row) {
+  openDetail(row)
+}
+
+/** 加载日志与 Tempo 的联查结果，并保持 Tempo 故障不影响日志查询。 */
+async function loadTrace() {
+  const traceId = selectedRow.value?.traceId
+  if (!traceId) return
+  traceOpen.value = true
+  traceLoading.value = true
+  traceError.value = ''
+  try {
+    traceData.value = await getTraceCorrelation(traceId)
+  } catch (error) {
+    traceData.value = null
+    traceError.value = error.message || 'Trace 查询失败'
+  } finally {
+    traceLoading.value = false
+  }
+}
+
+/** 将 Tempo 常见 v2 trace 结构展平为前端瀑布图行。 */
+function flattenTrace(value) {
+  const spans = []
+  const toNanoseconds = (raw) => {
+    if (typeof raw === 'bigint') return raw
+    if (typeof raw === 'number' && Number.isFinite(raw) && Number.isInteger(raw)) return BigInt(raw)
+    const text = String(raw ?? '').trim()
+    return /^\d+$/.test(text) ? BigInt(text) : 0n
+  }
+  const visit = (node, service = '') => {
+    if (!node || typeof node !== 'object') return
+    const attributes = node.attributes || node.resource?.attributes || []
+    const attributeList = Array.isArray(attributes) ? attributes : Object.entries(attributes).map(([key, val]) => ({ key, value: val }))
+    const serviceName = attributeList.find(item => item.key === 'service.name')?.value?.stringValue
+      || attributeList.find(item => item.key === 'service.name')?.value
+      || service
+    const start = toNanoseconds(node.startTimeUnixNano ?? node.start_time_unix_nano)
+    const duration = toNanoseconds(node.durationNanos ?? node.duration_nanos)
+    if (node.name && start > 0n) {
+      spans.push({
+        id: node.spanId || `${node.name}-${start}`,
+        name: node.name,
+        service: serviceName,
+        start,
+        duration,
+        durationMs: Math.max(0, Math.round(Number(duration) / 1e6))
+      })
+    }
+    Object.entries(node).forEach(([key, child]) => {
+      if (key !== 'attributes' && key !== 'resource') visit(child, serviceName)
+    })
+  }
+  visit(value)
+  if (!spans.length) return []
+  const origin = spans.reduce((minimum, span) => span.start < minimum ? span.start : minimum, spans[0].start)
+  const end = spans.reduce((maximum, span) => {
+    const spanEnd = span.start + span.duration
+    return spanEnd > maximum ? spanEnd : maximum
+  }, origin)
+  const total = end > origin ? end - origin : 1n
+  const percent = (nanoseconds) => Number(nanoseconds * 10000n / total) / 100
+  return spans.sort((a, b) => a.start < b.start ? -1 : a.start > b.start ? 1 : 0).map(span => ({
+    ...span,
+    left: Math.max(0, percent(span.start - origin)),
+    width: Math.max(1.5, percent(span.duration))
+  }))
+}
+
+const traceSpans = computed(() => flattenTrace(traceData.value?.tempoTrace))
 
 function shorten(value) {
   return value.length > 14 ? `${value.slice(0, 7)}…${value.slice(-5)}` : value

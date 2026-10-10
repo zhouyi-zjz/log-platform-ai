@@ -83,6 +83,19 @@ class LoginControllerTest {
     }
 
     @Test
+    void viewerCannotQueryAnUnassignedProject() throws Exception {
+        MockHttpSession session = sessionFrom(login("viewer", "viewer@2024").andReturn());
+
+        mockMvc.perform(post("/monitor/api/logs/search")
+                        .session(session)
+                        .with(SecurityMockMvcRequestPostProcessors.csrf())
+                        .contentType("application/json")
+                        .content("{\"project.id\":\"orders\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.message").value("无权访问项目: orders"));
+    }
+
+    @Test
     void invalidCredentialsAreRejected() throws Exception {
         login("admin", "wrong-password")
                 .andExpect(status().isUnauthorized())

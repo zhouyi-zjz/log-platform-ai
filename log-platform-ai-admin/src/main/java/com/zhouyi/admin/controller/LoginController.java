@@ -87,7 +87,15 @@ public class LoginController {
         return AjaxResult.success(new CsrfView(csrfToken.getHeaderName(), csrfToken.getToken()));
     }
 
-    public record UserView(Long userId, String username, String displayName, boolean admin) {
+    public record UserView(
+            /** 用户主键。 */
+            Long userId,
+            /** 登录用户名。 */
+            String username,
+            /** 展示名称。 */
+            String displayName,
+            /** 是否为管理员。 */
+            boolean admin) {
 
         private static UserView from(LoginUser loginUser) {
             return new UserView(
@@ -98,6 +106,10 @@ public class LoginController {
         }
     }
 
-    public record CsrfView(String headerName, String token) {
+    public record CsrfView(
+            /** 前端提交 CSRF 值时使用的请求头名称。 */
+            String headerName,
+            /** 当前会话的 CSRF Token。 */
+            String token) {
     }
 }

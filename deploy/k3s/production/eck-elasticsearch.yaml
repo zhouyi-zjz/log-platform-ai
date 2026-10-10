@@ -1,0 +1,27 @@
+apiVersion: elasticsearch.k8s.elastic.co/v1
+kind: Elasticsearch
+metadata:
+  name: log-platform
+  namespace: log-platform
+spec:
+  version: 8.15.3
+  auth: {}
+  http:
+    tls:
+      selfSignedCertificate:
+        disabled: false
+  nodeSets:
+    - name: data
+      count: 3
+      config:
+        node.roles: [master, data, ingest]
+        xpack.license.self_generated.type: basic
+      volumeClaimTemplates:
+        - metadata:
+            name: elasticsearch-data
+          spec:
+            accessModes: [ReadWriteOnce]
+            storageClassName: local-path
+            resources:
+              requests:
+                storage: 200Gi
