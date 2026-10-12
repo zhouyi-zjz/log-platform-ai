@@ -128,6 +128,19 @@ spec:
       app.kubernetes.io/name: log-platform-consumer
   policyTypes: ["Egress"]
   egress:
+    # Kafka bootstrap 与 advertised listener 都使用集群 DNS 名称。
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
     - to:
         - podSelector:
             matchLabels:

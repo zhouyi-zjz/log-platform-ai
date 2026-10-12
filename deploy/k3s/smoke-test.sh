@@ -14,6 +14,8 @@ set +a
 command -v kubectl >/dev/null || { echo "kubectl is required" >&2; exit 1; }
 command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
 
+kubectl -n "$NAMESPACE" rollout status deployment/log-platform-consumer --timeout=2m
+
 PORT="${SMOKE_PORT:-18080}"
 TMP_DIR="$(mktemp -d)"
 cleanup() {

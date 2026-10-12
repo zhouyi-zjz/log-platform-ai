@@ -62,6 +62,19 @@ spec:
         - protocol: TCP
           port: 8103
   egress:
+    # MySQL、Kafka、Elasticsearch 与 Redis 均通过 Kubernetes Service 名称访问。
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+          podSelector:
+            matchLabels:
+              k8s-app: kube-dns
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
     - to:
         - podSelector:
             matchLabels:
