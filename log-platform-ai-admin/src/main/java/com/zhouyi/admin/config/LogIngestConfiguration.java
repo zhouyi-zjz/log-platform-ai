@@ -2,8 +2,10 @@ package com.zhouyi.admin.config;
 
 import org.apache.kafka.clients.admin.NewTopic;
 import org.apache.kafka.clients.consumer.ConsumerConfig;
+import org.apache.kafka.clients.producer.ProducerConfig;
 import org.apache.kafka.common.serialization.StringDeserializer;
 import org.apache.kafka.common.serialization.StringSerializer;
+import org.springframework.boot.autoconfigure.kafka.KafkaProperties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -20,6 +22,7 @@ import org.springframework.kafka.listener.DefaultErrorHandler;
 import org.springframework.util.backoff.FixedBackOff;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -34,12 +37,11 @@ public class LogIngestConfiguration {
 
     @Bean
     public ProducerFactory<String, String> logProducerFactory(
-            org.springframework.boot.autoconfigure.kafka.KafkaProperties kafkaProperties) {
+            KafkaProperties kafkaProperties) {
         Map<String, Object> properties = new HashMap<>(kafkaProperties.buildProducerProperties());
-        properties.putIfAbsent(org.apache.kafka.clients.producer.ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG,
-                StringSerializer.class);
-        properties.putIfAbsent(org.apache.kafka.clients.producer.ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG,
-                StringSerializer.class);
+        properties.put(ProducerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers(kafkaProperties));
+        properties.putIfAbsent(ProducerConfig.KEY_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
+        properties.putIfAbsent(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, StringSerializer.class);
         return new DefaultKafkaProducerFactory<>(properties);
     }
 
@@ -50,15 +52,35 @@ public class LogIngestConfiguration {
 
     @Bean
     public ConsumerFactory<String, String> logConsumerFactory(
-            org.springframework.boot.autoconfigure.kafka.KafkaProperties kafkaProperties,
+            KafkaProperties kafkaProperties,
             LogIngestProperties ingestProperties) {
         Map<String, Object> properties = new HashMap<>(kafkaProperties.buildConsumerProperties());
+        properties.put(ConsumerConfig.BOOTSTRAP_SERVERS_CONFIG, bootstrapServers(kafkaProperties));
         properties.putIfAbsent(ConsumerConfig.KEY_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         properties.putIfAbsent(ConsumerConfig.VALUE_DESERIALIZER_CLASS_CONFIG, StringDeserializer.class);
         // 让 Bulk 的动作上限真正约束单次 poll，避免配置写了 1000 条而客户端仍按默认值取数。
         properties.putIfAbsent(ConsumerConfig.MAX_POLL_RECORDS_CONFIG,
                 Math.max(1, ingestProperties.getBulkMaxActions()));
         return new DefaultKafkaConsumerFactory<>(properties);
+    }
+
+    /**
+     * 显式把 spring.kafka.bootstrap-servers 绑定到自定义 Producer/Consumer Factory。
+     * application.yml 会先把 KAFKA_BOOTSTRAP_SERVERS 映射到该 Spring Boot 属性。
+     */
+    private static List<String> bootstrapServers(KafkaProperties kafkaProperties) {
+        List<String> configuredServers = kafkaProperties.getBootstrapServers();
+        if (configuredServers == null) {
+            throw new IllegalStateException("spring.kafka.bootstrap-servers 不能为空");
+        }
+        List<String> servers = configuredServers.stream()
+                .map(String::trim)
+                .filter(server -> !server.isEmpty())
+                .toList();
+        if (servers.isEmpty()) {
+            throw new IllegalStateException("spring.kafka.bootstrap-servers 不能为空");
+        }
+        return servers;
     }
 
     @Bean

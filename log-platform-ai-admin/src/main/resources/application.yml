@@ -44,8 +44,8 @@ spring:
     redis:
       url: ${REDIS_URL:redis://localhost:6379}
   kafka:
-    # 本地开发默认连接 localhost；生产环境请通过环境变量覆盖，并开启 SASL/TLS。
-    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS:localhost:9092}
+    # Kafka 是采集主链路，部署时必须显式注入 broker，避免容器误连自身 localhost。
+    bootstrap-servers: ${KAFKA_BOOTSTRAP_SERVERS}
     client-id: ${LOG_PLATFORM_KAFKA_SERVICE_PRINCIPAL:log-platform-observability}
     properties:
       # 生产环境由 Secret 注入双向 TLS 证书；默认保留 SSL，避免明文连接被误用于生产。
