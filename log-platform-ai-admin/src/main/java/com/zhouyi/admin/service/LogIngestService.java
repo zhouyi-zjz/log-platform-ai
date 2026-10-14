@@ -127,6 +127,7 @@ public class LogIngestService {
     private void markPublishFailure() {
         if (metrics != null) {
             metrics.markIngestRejected();
+            metrics.markKafkaPublishFailure();
         }
     }
 

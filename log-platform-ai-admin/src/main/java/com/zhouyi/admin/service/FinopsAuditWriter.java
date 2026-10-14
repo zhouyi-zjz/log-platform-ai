@@ -58,7 +58,7 @@ public class FinopsAuditWriter {
             String response = restClient.post()
                     .uri("/{index}/_bulk", properties.getBudgetAuditIndex())
                     .contentType(MediaType.parseMediaType("application/x-ndjson"))
-                    .body(body)
+                    .body(body.getBytes(StandardCharsets.UTF_8))
                     .retrieve()
                     .body(String.class);
             if (response == null || response.isBlank()) {

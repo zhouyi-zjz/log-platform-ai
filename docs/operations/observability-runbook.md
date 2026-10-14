@@ -1,5 +1,27 @@
 # 可观测平台运行手册
 
+<a id="kafka"></a>
+## Kafka 集群
+
+1. 查看 `log_platform_kafka_available` 和 `log_platform_kafka_monitor_last_success_unixtime`，先区分 Kafka 故障与监控抓取故障。
+2. 对比 `log_platform_kafka_broker_count` 与 `log_platform_kafka_expected_broker_count`，并检查
+   `log_platform_kafka_offline_partitions`、`log_platform_kafka_under_replicated_partitions`。
+3. 使用 Kafka 管理工具 describe `logs.raw`、`logs.raw.DLT`，核对 leader、replica 和 ISR；再检查 broker
+   Pod、磁盘容量、网络和 controller 日志。
+4. `log_platform_kafka_publish_failures_total` 增长表示 HTTP 入口未获得 broker ack，调用方已收到 503。
+   保持 Fluent Bit 磁盘缓冲，不要改为无限同步重试；恢复 Kafka 后核对缓冲回放与事件 ID。
+
+<a id="kafka-consumer"></a>
+## Kafka Consumer
+
+1. 查看 `log_platform_consumer_lag`、`log_platform_consumer_events_total` 和
+   `log_platform_bulk_failures_total`，区分 Consumer 停止、消息异常与 Elasticsearch 写入失败。
+2. 检查 `log-platform-consumer` Deployment 的就绪副本、重启和日志，再核对 `logs-es-writer` 消费组
+   的成员、已提交 offset 和 `logs.raw.DLT`。
+3. Consumer 无实例时先恢复 Deployment；有实例但 lag 不回落时先修复 ES/消息根因，再按分区数扩容。
+   Consumer 副本数超过 Topic 分区数不会增加并行度。
+4. 恢复标准是 lag 持续回落、消费计数恢复增长、Bulk 失败停止且抽样事件能在 ES 查询到；不要只以 Pod Running 为准。
+
 ## 接入拒绝率（ingest）
 
 1. 检查 `/actuator/prometheus` 的 `log_platform_ingest_rejected_total` 与 HTTP 入口返回码。

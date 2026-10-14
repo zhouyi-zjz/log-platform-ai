@@ -17,9 +17,13 @@ command -v curl >/dev/null || { echo "curl is required" >&2; exit 1; }
 kubectl -n "$NAMESPACE" rollout status deployment/log-platform-consumer --timeout=2m
 
 PORT="${SMOKE_PORT:-18080}"
+BACKEND_METRICS_PORT="${BACKEND_METRICS_PORT:-18081}"
+CONSUMER_METRICS_PORT="${CONSUMER_METRICS_PORT:-18082}"
 TMP_DIR="$(mktemp -d)"
 cleanup() {
   if [[ -n "${PORT_FORWARD_PID:-}" ]]; then kill "$PORT_FORWARD_PID" >/dev/null 2>&1 || true; fi
+  if [[ -n "${BACKEND_METRICS_PID:-}" ]]; then kill "$BACKEND_METRICS_PID" >/dev/null 2>&1 || true; fi
+  if [[ -n "${CONSUMER_METRICS_PID:-}" ]]; then kill "$CONSUMER_METRICS_PID" >/dev/null 2>&1 || true; fi
   rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT
@@ -49,5 +53,31 @@ if [[ "$status" != "202" ]]; then
   exit 1
 fi
 
-echo "Frontend health, CSRF endpoint, and Kafka ingest smoke checks passed."
+kubectl -n "$NAMESPACE" port-forward service/log-platform-backend "$BACKEND_METRICS_PORT:8103" \
+  >"$TMP_DIR/backend-metrics-port-forward.log" 2>&1 &
+BACKEND_METRICS_PID=$!
+kubectl -n "$NAMESPACE" port-forward service/log-platform-consumer "$CONSUMER_METRICS_PORT:8104" \
+  >"$TMP_DIR/consumer-metrics-port-forward.log" 2>&1 &
+CONSUMER_METRICS_PID=$!
+for _ in {1..60}; do
+  backend_metrics="$(curl -fsS "http://127.0.0.1:$BACKEND_METRICS_PORT/actuator/prometheus" 2>/dev/null || true)"
+  consumer_metrics="$(curl -fsS "http://127.0.0.1:$CONSUMER_METRICS_PORT/actuator/prometheus" 2>/dev/null || true)"
+  if grep -q 'log_platform_kafka_available{[^}]*role="api"[^}]*} 1' <<<"$backend_metrics" \
+      && grep -q 'log_platform_consumer_events_total{[^}]*role="consumer"' <<<"$consumer_metrics"; then
+    break
+  fi
+  sleep 1
+done
+grep -q 'log_platform_kafka_available{[^}]*role="api"[^}]*} 1' <<<"$backend_metrics" || {
+  cat "$TMP_DIR/backend-metrics-port-forward.log" >&2
+  echo "Kafka monitoring did not become available" >&2
+  exit 1
+}
+grep -q 'log_platform_consumer_events_total{[^}]*role="consumer"' <<<"$consumer_metrics" || {
+  cat "$TMP_DIR/consumer-metrics-port-forward.log" >&2
+  echo "Consumer Prometheus metrics are unavailable" >&2
+  exit 1
+}
+
+echo "Frontend health, Kafka ingest, Kafka monitoring, and Consumer metrics checks passed."
 echo "The ingest response only confirms Kafka acceptance; verify ES visibility with the UI or query API."

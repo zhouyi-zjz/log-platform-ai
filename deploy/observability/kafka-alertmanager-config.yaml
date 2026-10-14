@@ -1,0 +1,26 @@
+apiVersion: monitoring.coreos.com/v1alpha1
+kind: AlertmanagerConfig
+metadata:
+  name: log-platform-kafka
+  namespace: monitoring
+  labels:
+    alertmanagerConfig: log-platform
+    app.kubernetes.io/name: log-platform
+spec:
+  route:
+    receiver: log-platform-kafka-webhook
+    groupBy: [alertname, severity, signal]
+    groupWait: 30s
+    groupInterval: 5m
+    repeatInterval: 4h
+    matchers:
+      - name: signal
+        value: kafka|dlt
+        matchType: =~
+  receivers:
+    - name: log-platform-kafka-webhook
+      webhookConfigs:
+        - urlSecret:
+            name: log-platform-alerting
+            key: webhook-url
+          sendResolved: true

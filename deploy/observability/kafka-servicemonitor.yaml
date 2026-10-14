@@ -1,0 +1,24 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: log-platform-kafka
+  namespace: monitoring
+  labels:
+    app.kubernetes.io/name: log-platform
+    prometheus: kube-prometheus
+spec:
+  namespaceSelector:
+    matchNames:
+      - ${NAMESPACE}
+  selector:
+    matchExpressions:
+      - key: app.kubernetes.io/name
+        operator: In
+        values:
+          - log-platform-backend
+          - log-platform-consumer
+  endpoints:
+    - port: http
+      path: /actuator/prometheus
+      interval: 30s
+      scrapeTimeout: 10s

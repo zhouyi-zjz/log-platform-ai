@@ -375,7 +375,7 @@ flowchart LR
 1. 用真实 Kafka、ES、Redis、Tempo 环境跑通写入、查询、Trace、DLT 和滚动升级验收。
 2. 补前端导出、项目管理、DLT 和 Budget Audit 入口，并让接口权限与审计可见。
 3. 完成 Kafka/ES/MySQL/Redis HA、TLS/ACL、快照恢复、容量压测和故障演练。
-4. 接入 Prometheus/Grafana/Alertmanager，建立消费积压、ES 写入失败、查询超时、Trace 完整率和 DLT 积压告警。
+4. 在目标环境联调 Prometheus/Grafana/Alertmanager，验证已提供的 Kafka 消费积压、ES 写入失败、查询超时、Trace 完整率和 DLT 积压规则及通知送达。
 
 ## 8. 事实来源
 

@@ -31,6 +31,8 @@ spec:
           env:
             - name: SERVER_PORT
               value: "8104"
+            - name: LOG_PLATFORM_ROLE
+              value: consumer
             - name: SESSION_STORE_TYPE
               value: "none"
             - name: LOG_CONSUMER_ENABLED
@@ -106,6 +108,21 @@ spec:
               cpu: "2"
               memory: 2Gi
 ---
+apiVersion: v1
+kind: Service
+metadata:
+  name: log-platform-consumer
+  namespace: ${NAMESPACE}
+  labels:
+    app.kubernetes.io/name: log-platform-consumer
+spec:
+  selector:
+    app.kubernetes.io/name: log-platform-consumer
+  ports:
+    - name: http
+      port: 8104
+      targetPort: 8104
+---
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
@@ -126,7 +143,15 @@ spec:
   podSelector:
     matchLabels:
       app.kubernetes.io/name: log-platform-consumer
-  policyTypes: ["Egress"]
+  policyTypes: ["Ingress", "Egress"]
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: monitoring
+      ports:
+        - protocol: TCP
+          port: 8104
   egress:
     # Kafka bootstrap 与 advertised listener 都使用集群 DNS 名称。
     - to:

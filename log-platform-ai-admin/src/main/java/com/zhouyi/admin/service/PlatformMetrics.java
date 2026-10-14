@@ -5,6 +5,7 @@ import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.Timer;
 import org.springframework.stereotype.Component;
 
+import java.time.Instant;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
@@ -27,11 +28,19 @@ public class PlatformMetrics {
     private final Counter exportFailed;
     private final Counter dltReplaySuccess;
     private final Counter dltReplayFailure;
+    private final Counter kafkaPublishFailures;
+    private final Counter kafkaMonitorFailures;
     private final Timer ingestAckLatency;
     private final Timer queryLatency;
     private final Timer bulkLatency;
     private final AtomicLong consumerLag = new AtomicLong(-1);
     private final AtomicLong dltPending = new AtomicLong(0);
+    private final AtomicLong kafkaAvailable = new AtomicLong(0);
+    private final AtomicLong kafkaBrokerCount = new AtomicLong(-1);
+    private final AtomicLong kafkaExpectedBrokerCount = new AtomicLong(1);
+    private final AtomicLong kafkaUnderReplicatedPartitions = new AtomicLong(-1);
+    private final AtomicLong kafkaOfflinePartitions = new AtomicLong(-1);
+    private final AtomicLong kafkaMonitorLastSuccess = new AtomicLong(0);
 
     /** 注册平台固定指标，启动时即能被 Actuator/Prometheus 发现。 */
     public PlatformMetrics(MeterRegistry registry) {
@@ -55,6 +64,10 @@ public class PlatformMetrics {
                 .description("成功重放的 DLT 消息数").register(registry);
         dltReplayFailure = Counter.builder("log_platform_dlt_replay_failure_total")
                 .description("失败的 DLT 重放尝试数").register(registry);
+        kafkaPublishFailures = Counter.builder("log_platform_kafka_publish_failures_total")
+                .description("未收到 Kafka broker ack 的日志发布次数").register(registry);
+        kafkaMonitorFailures = Counter.builder("log_platform_kafka_monitor_failures_total")
+                .description("Kafka Admin API 自监控采集失败次数").register(registry);
         ingestAckLatency = Timer.builder("log_platform_ingest_ack_latency")
                 .description("HTTP 接入等待 Kafka ack 的耗时").register(registry);
         queryLatency = Timer.builder("log_platform_query_latency")
@@ -63,6 +76,12 @@ public class PlatformMetrics {
                 .description("Elasticsearch Bulk 请求耗时").register(registry);
         registry.gauge("log_platform_consumer_lag", consumerLag);
         registry.gauge("log_platform_dlt_pending_records", dltPending);
+        registry.gauge("log_platform_kafka_available", kafkaAvailable);
+        registry.gauge("log_platform_kafka_broker_count", kafkaBrokerCount);
+        registry.gauge("log_platform_kafka_expected_broker_count", kafkaExpectedBrokerCount);
+        registry.gauge("log_platform_kafka_under_replicated_partitions", kafkaUnderReplicatedPartitions);
+        registry.gauge("log_platform_kafka_offline_partitions", kafkaOfflinePartitions);
+        registry.gauge("log_platform_kafka_monitor_last_success_unixtime", kafkaMonitorLastSuccess);
     }
 
     /** 记录一次 Kafka 已确认的接入。 */
@@ -95,6 +114,9 @@ public class PlatformMetrics {
     /** 记录 DLT 单条重放失败。 */
     public void markDltReplayFailure() { dltReplayFailure.increment(); }
 
+    /** 记录一次 Kafka 发布或 broker ack 失败。 */
+    public void markKafkaPublishFailure() { kafkaPublishFailures.increment(); }
+
     /** 创建入口 ack 计时样本。 */
     public long startIngestAck() { return System.nanoTime(); }
 
@@ -123,4 +145,29 @@ public class PlatformMetrics {
 
     /** 更新允许操作的 DLT 总积压，未知时使用 -1。 */
     public void setDltPending(long pending) { dltPending.set(Math.max(-1, pending)); }
+
+    /** 更新一次完整 Kafka 快照；成功时间用于检测监控任务停滞。 */
+    public void updateKafkaSnapshot(long brokerCount, long expectedBrokerCount,
+                                    long underReplicatedPartitions, long offlinePartitions,
+                                    long lag, long pendingDltRecords) {
+        kafkaBrokerCount.set(Math.max(0, brokerCount));
+        kafkaExpectedBrokerCount.set(Math.max(1, expectedBrokerCount));
+        kafkaUnderReplicatedPartitions.set(Math.max(0, underReplicatedPartitions));
+        kafkaOfflinePartitions.set(Math.max(0, offlinePartitions));
+        consumerLag.set(Math.max(0, lag));
+        dltPending.set(Math.max(0, pendingDltRecords));
+        kafkaMonitorLastSuccess.set(Instant.now().getEpochSecond());
+        kafkaAvailable.set(1);
+    }
+
+    /** 采集失败时将瞬时状态标为不可用，旧数值不再冒充当前状态。 */
+    public void markKafkaMonitorFailure() {
+        kafkaMonitorFailures.increment();
+        kafkaAvailable.set(0);
+        kafkaBrokerCount.set(-1);
+        kafkaUnderReplicatedPartitions.set(-1);
+        kafkaOfflinePartitions.set(-1);
+        consumerLag.set(-1);
+        dltPending.set(-1);
+    }
 }

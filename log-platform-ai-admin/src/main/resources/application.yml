@@ -20,6 +20,7 @@ management:
   metrics:
     tags:
       application: ${spring.application.name}
+      role: ${LOG_PLATFORM_ROLE:api}
   tracing:
     # OpenTelemetry 默认关闭，启用后由 SDK 异步发送到 Collector，业务链路保持 fail-open。
     enabled: ${OTEL_ENABLED:false}
@@ -81,6 +82,13 @@ spring:
 # 日志平台采集链路配置。采集器直写 Kafka 时只需关注 kafka-topic；
 # 无法使用 Kafka 输出插件的项目可以 POST 到 /monitor/api/logs/ingest。
 log-platform:
+  kafka-monitoring:
+    # API 角色启用、Consumer 角色关闭；Prometheus 会聚合多个 API 副本的固定低基数指标。
+    enabled: ${KAFKA_MONITOR_ENABLED:false}
+    initial-delay-ms: ${KAFKA_MONITOR_INITIAL_DELAY_MS:5000}
+    interval-ms: ${KAFKA_MONITOR_INTERVAL_MS:30000}
+    timeout-ms: ${KAFKA_MONITOR_TIMEOUT_MS:5000}
+    expected-brokers: ${KAFKA_EXPECTED_BROKERS:1}
   tempo:
     # Trace 联查默认关闭；开启后只读取 Tempo，不改变日志权限和 FinOps 行为。
     enabled: ${TEMPO_QUERY_ENABLED:false}

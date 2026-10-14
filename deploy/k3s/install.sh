@@ -15,6 +15,7 @@ PUSH_IMAGES_OVERRIDE="${PUSH_IMAGES-}"
 LOAD_IMAGES_OVERRIDE="${LOAD_IMAGES-}"
 SKIP_BUILD_OVERRIDE="${SKIP_BUILD-}"
 INSTALL_FLUENT_BIT_OVERRIDE="${INSTALL_FLUENT_BIT-}"
+INSTALL_KAFKA_ALERT_ROUTING_OVERRIDE="${INSTALL_KAFKA_ALERT_ROUTING-}"
 set -a
 # shellcheck disable=SC1090
 source "$ENV_FILE"
@@ -24,6 +25,7 @@ set +a
 [[ -n "$LOAD_IMAGES_OVERRIDE" ]] && LOAD_IMAGES="$LOAD_IMAGES_OVERRIDE"
 [[ -n "$SKIP_BUILD_OVERRIDE" ]] && SKIP_BUILD="$SKIP_BUILD_OVERRIDE"
 [[ -n "$INSTALL_FLUENT_BIT_OVERRIDE" ]] && INSTALL_FLUENT_BIT="$INSTALL_FLUENT_BIT_OVERRIDE"
+[[ -n "$INSTALL_KAFKA_ALERT_ROUTING_OVERRIDE" ]] && INSTALL_KAFKA_ALERT_ROUTING="$INSTALL_KAFKA_ALERT_ROUTING_OVERRIDE"
 
 : "${NAMESPACE:=log-platform}"
 : "${STORAGE_CLASS:=local-path}"
@@ -46,6 +48,7 @@ set +a
 : "${INSTALL_FLUENT_BIT:=false}"
 : "${INSTALL_OTEL_COLLECTOR:=false}"
 : "${INSTALL_PROMETHEUS_RULES:=false}"
+: "${INSTALL_KAFKA_ALERT_ROUTING:=false}"
 : "${OTEL_COLLECTOR_IMAGE:=otel/opentelemetry-collector-contrib:0.123.0}"
 : "${OTEL_ENABLED:=false}"
 : "${OTEL_EXPORTER_OTLP_ENDPOINT:=http://otel-collector:4318/v1/traces}"
@@ -101,6 +104,10 @@ if [[ "$ES_REPLICAS" != "2" ]]; then
 fi
 if [[ "$IMAGE_PULL_POLICY" != "IfNotPresent" && "$IMAGE_PULL_POLICY" != "Always" && "$IMAGE_PULL_POLICY" != "Never" ]]; then
   echo "IMAGE_PULL_POLICY must be IfNotPresent, Always, or Never" >&2
+  exit 1
+fi
+if [[ "$INSTALL_KAFKA_ALERT_ROUTING" == "true" && -z "${ALERT_WEBHOOK_URL:-}" ]]; then
+  echo "ALERT_WEBHOOK_URL is required when INSTALL_KAFKA_ALERT_ROUTING=true" >&2
   exit 1
 fi
 
@@ -231,7 +238,16 @@ if [[ "$INSTALL_OTEL_COLLECTOR" == "true" ]]; then
   apply_manifest 46-otel-collector.yaml
 fi
 if [[ "$INSTALL_PROMETHEUS_RULES" == "true" ]]; then
-  kubectl apply -f "$ROOT_DIR/deploy/observability/prometheus-rules.yaml"
+  kubectl get namespace monitoring >/dev/null
+  "$ROOT_DIR/deploy/observability/render-prometheus-rule.sh" | kubectl apply -f -
+  envsubst < "$ROOT_DIR/deploy/observability/kafka-servicemonitor.yaml" | kubectl apply -f -
+fi
+if [[ "$INSTALL_KAFKA_ALERT_ROUTING" == "true" ]]; then
+  kubectl get namespace monitoring >/dev/null
+  kubectl -n monitoring create secret generic log-platform-alerting \
+    --from-literal=webhook-url="$ALERT_WEBHOOK_URL" \
+    --dry-run=client -o yaml | kubectl apply -f -
+  kubectl apply -f "$ROOT_DIR/deploy/observability/kafka-alertmanager-config.yaml"
 fi
 apply_manifest 50-frontend.yaml
 apply_manifest 60-ingress.yaml

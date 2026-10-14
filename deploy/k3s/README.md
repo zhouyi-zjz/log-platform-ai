@@ -58,11 +58,12 @@ kubectl -n log-platform create secret tls log-platform-tls \
   应用每次启动都从 Secret 创建或同步该管理员，因此旧版固定密码也会被覆盖；SQL 和镜像中不保存默认登录密码。
 - 后端在 K3s 中设置 `SESSION_STORE_TYPE=redis` 和 `LOG_QUERY_DISTRIBUTED_RATE_LIMIT=true`，会话与查询限流依赖 Redis Service；Redis 当前只有 1 个副本和 1 个 PVC，只是共享状态基线，不是 Redis HA。无 Redis 的本地开发/测试默认使用进程内 Session 和限流。
 - `/actuator/health`、`/actuator/metrics` 和 `/actuator/prometheus` 已暴露给集群内部监控；HPA 需要集群已安装 `metrics-server`，Prometheus 需要允许访问后端 8103 端口。
-- API 与 Consumer 已拆成两个 Deployment：API 的 `LOG_CONSUMER_ENABLED=false`，Consumer 使用独立副本数和无 Service 暴露的 8104 端口，二者共享 Kafka consumer group 以按分区扩展消费。
+- API 与 Consumer 已拆成两个 Deployment：API 的 `LOG_CONSUMER_ENABLED=false`，Consumer 使用独立副本数；8104 Service 只供 `monitoring` 命名空间抓取指标，不承载业务流量。二者共享 Kafka consumer group 以按分区扩展消费。
 - K3s 内置 Kafka 使用 `PLAINTEXT` 监听 `kafka:9092`，因此 `.env` 中默认 `KAFKA_SECURITY_PROTOCOL=PLAINTEXT`；接入外部 TLS/SASL Kafka 时必须同时设置协议和对应的 SSL/SASL 参数，不能继续使用默认值。
 - Backend 与 Consumer 的 Egress NetworkPolicy 必须允许访问 `kube-system` 的 CoreDNS UDP/TCP 53；否则 Kafka 客户端虽然能读取 `kafka:9092`，仍会以 `No resolvable bootstrap urls` 启动失败。
-- `deploy/observability/prometheus-rules.yaml` 提供接入拒绝率、Bulk 失败、查询 P95、Trace 完整率和 Tempo 降级告警；需要在目标 Prometheus Operator 中安装后才会生效。
-- `INSTALL_PROMETHEUS_RULES=true` 时安装上述 `PrometheusRule`；目标集群必须已有 Prometheus Operator 和 `monitoring` 命名空间，否则保持关闭并由监控团队单独应用规则。
+- `deploy/observability/prometheus-rules.yaml` 提供 Kafka 可用性/broker/分区副本/发布失败/消费 lag 与停滞、DLT、Bulk、查询和 Trace 告警；安装脚本通过 `render-prometheus-rule.sh` 将原生规则包装为 Operator CRD 后应用。
+- `INSTALL_PROMETHEUS_RULES=true` 时同时安装 `PrometheusRule` 和抓取 API/Consumer 的 `ServiceMonitor`；目标集群必须已有 Prometheus Operator 和 `monitoring` 命名空间，其 Prometheus selector 需匹配 `prometheus=kube-prometheus`。
+- `INSTALL_KAFKA_ALERT_ROUTING=true` 时还会从 `ALERT_WEBHOOK_URL` 创建 `monitoring/log-platform-alerting` Secret 并安装 `AlertmanagerConfig`。目标 Alertmanager 必须选择 `alertmanagerConfig=log-platform`；应使用具备鉴权、限流和轮换能力的内部告警网关 URL。
 - `INSTALL_OTEL_COLLECTOR=true` 时会额外部署 `otel-collector` Service。Collector 只负责信号转发和尾采样，Tempo/Loki 仍需由目标观测栈提供；`OTEL_ENABLED=true` 后后端通过 OTLP HTTP 发送 Trace，Collector 或下游不可用不应阻塞日志接入。
 - 异步导出接口 `POST /monitor/api/logs/exports` 复用查询 ACL，单任务默认最多 10,000 行/50 MiB，结果在应用内存保留 30 分钟；多副本生产环境仍需迁移持久化任务队列和对象存储。
 - `KAFKA_REPLICAS=2`、`KAFKA_REPLICATION_FACTOR=2` 和 `ES_REPLICAS=2` 是本清单的固定双实例拓扑，安装脚本会拒绝其他值。两个 KRaft controller 不能容忍一台节点故障后继续选主；需要更高可用性时应改用生产 Operator（例如 Strimzi/ECK）并使用奇数节点。
@@ -103,4 +104,4 @@ CONFIRM=DELETE deploy/k3s/uninstall.sh log-platform
 
 ## 生产扩展
 
-当前清单是可运行的双实例基线，不是完整高可用方案。投入生产前至少应完成：Kafka 奇数节点和副本、ES 多数据节点、加密连接、镜像签名/私有仓库、备份恢复演练、Prometheus/告警、Ingress 证书自动续期、Redis HA、导出持久化队列/对象存储，以及按照 [容量模型](../../docs/capacity/log-platform-capacity-model.md) 调整 PVC 和资源请求。
+当前清单是可运行的双实例基线，不是完整高可用方案。投入生产前至少应完成：Kafka 奇数节点和副本、ES 多数据节点、加密连接、镜像签名/私有仓库、备份恢复演练、Prometheus/Alertmanager 通知联调与告警演练、Ingress 证书自动续期、Redis HA、导出持久化队列/对象存储，以及按照 [容量模型](../../docs/capacity/log-platform-capacity-model.md) 调整 PVC 和资源请求。

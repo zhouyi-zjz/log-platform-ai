@@ -43,6 +43,8 @@ spec:
           env:
             - name: SERVER_PORT
               value: "8103"
+            - name: LOG_PLATFORM_ROLE
+              value: api
             - name: SESSION_COOKIE_SECURE
               value: "${SESSION_COOKIE_SECURE}"
             - name: SESSION_STORE_TYPE
@@ -81,6 +83,10 @@ spec:
               value: "${KAFKA_SECURITY_PROTOCOL}"
             - name: KAFKA_CONSUMER_GROUP
               value: logs-es-writer
+            - name: KAFKA_MONITOR_ENABLED
+              value: "true"
+            - name: KAFKA_EXPECTED_BROKERS
+              value: "${KAFKA_REPLICAS}"
             - name: LOG_KAFKA_TOPIC
               value: logs.raw
             - name: LOG_CONSUMER_ENABLED

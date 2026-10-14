@@ -283,7 +283,7 @@ sequenceDiagram
 - 查询和消费位于同一进程、共享 ES 客户端和 CPU/内存资源，重查询可能影响写入，反之亦然。
 - 消费并发、poll 批大小、Bulk 大小和 flush 时间没有形成一套实际生效的配置。
 - DLT 只有写入路径，没有重放工具、处理状态、告警和毒消息隔离流程。
-- 已提供 Actuator/Micrometer 指标和 Prometheus 端点；Prometheus 抓取规则、Grafana/Alertmanager 告警以及 Kafka lag/JVM/磁盘看板仍未部署验证。
+- 已提供 Actuator/Micrometer 指标、Kafka Admin API 健康/lag 采集、Prometheus Kafka 告警规则和 Alertmanager webhook 路由；目标环境抓取、通知送达以及 Kafka JVM/磁盘看板仍未部署验证。
 - 无 ES Snapshot、MySQL 备份、Kafka 故障恢复方案和恢复演练记录。
 - 冒烟测试只确认前端、CSRF 和 Kafka 入口返回 202，没有验证日志最终进入 ES 并可被授权用户查询。
 

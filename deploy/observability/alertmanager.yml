@@ -1,0 +1,16 @@
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: log-platform-webhook
+  group_by: [alertname, severity, signal]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+
+receivers:
+  - name: log-platform-webhook
+    webhook_configs:
+      # 本地联调占位地址；生产使用 AlertmanagerConfig + Secret 注入真实 webhook。
+      - url: http://host.docker.internal:5001/alerts
+        send_resolved: true

@@ -65,7 +65,9 @@ public class ElasticsearchLogWriter {
             String response = restClient.post()
                     .uri("/{index}/_bulk", properties.getElasticsearchIndex())
                     .contentType(MediaType.parseMediaType("application/x-ndjson"))
-                    .body(body)
+                    // StringHttpMessageConverter 对非 application/json 默认使用 ISO-8859-1，
+                    // NDJSON 必须先编码为 UTF-8 字节，否则中文会在发往 ES 前变成问号。
+                    .body(body.getBytes(StandardCharsets.UTF_8))
                     .retrieve()
                     .body(String.class);
             validateBulkResponse(response);

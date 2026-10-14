@@ -7,10 +7,14 @@ BASE_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 : "${TEMPO_PORT:=3200}"
 : "${LOKI_PORT:=3100}"
 : "${PROMETHEUS_PORT:=9090}"
+: "${ALERTMANAGER_PORT:=9093}"
 : "${COLLECTOR_HEALTH_PORT:=13133}"
 
 curl --fail --silent "http://${OBSERVABILITY_HOST}:${COLLECTOR_HEALTH_PORT}/" >/dev/null
 curl --fail --silent "http://${OBSERVABILITY_HOST}:${TEMPO_PORT}/ready" >/dev/null
 curl --fail --silent "http://${OBSERVABILITY_HOST}:${LOKI_PORT}/ready" >/dev/null
 curl --fail --silent "http://${OBSERVABILITY_HOST}:${PROMETHEUS_PORT}/-/ready" >/dev/null
-echo "observability stack health checks passed"
+curl --fail --silent "http://${OBSERVABILITY_HOST}:${ALERTMANAGER_PORT}/-/ready" >/dev/null
+curl --fail --silent "http://${OBSERVABILITY_HOST}:${PROMETHEUS_PORT}/api/v1/rules" \
+  | grep -q 'LogPlatformKafkaUnavailable'
+echo "observability stack health and Kafka alert rule checks passed"

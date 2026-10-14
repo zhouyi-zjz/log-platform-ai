@@ -3,12 +3,20 @@ package com.zhouyi.admin.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zhouyi.admin.config.LogIngestProperties;
 import org.junit.jupiter.api.Test;
+import org.springframework.http.MediaType;
+import org.springframework.test.web.client.MockRestServiceServer;
+import org.springframework.web.client.RestClient;
 
+import java.nio.charset.StandardCharsets;
 import java.util.List;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.springframework.test.web.client.ExpectedCount.once;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
+import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
 
 class ElasticsearchLogWriterTest {
 
@@ -33,6 +41,30 @@ class ElasticsearchLogWriterTest {
         assertThat(body).contains("\"event.id\":\"evt-42\"");
         assertThat(ElasticsearchLogWriter.documentId(event))
                 .isNotEqualTo(ElasticsearchLogWriter.documentId(sameEventIdInAnotherProject));
+    }
+
+    @Test
+    void bulkRequestWritesChineseAsUtf8Bytes() throws Exception {
+        RestClient.Builder builder = RestClient.builder().baseUrl("http://elasticsearch:9200");
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        LogIngestProperties properties = new LogIngestProperties();
+        ElasticsearchLogWriter httpWriter = new ElasticsearchLogWriter(
+                builder.build(), objectMapper, properties);
+        var event = normalizer.normalize("""
+                {"event.id":"evt-utf8","project.id":"area","message":"全局异常处理 <未知异常> ======> 请求地址 </area_graph/list>"}
+                """);
+        byte[] expectedBody = httpWriter.buildBulkBody(List.of(event))
+                .getBytes(StandardCharsets.UTF_8);
+
+        server.expect(once(), requestTo("http://elasticsearch:9200/"
+                        + properties.getElasticsearchIndex() + "/_bulk"))
+                .andExpect(content().contentType(MediaType.parseMediaType("application/x-ndjson")))
+                .andExpect(content().bytes(expectedBody))
+                .andRespond(withSuccess("{\"errors\":false,\"items\":[]}", MediaType.APPLICATION_JSON));
+
+        httpWriter.writeBulk(List.of(event));
+
+        server.verify();
     }
 
     @Test

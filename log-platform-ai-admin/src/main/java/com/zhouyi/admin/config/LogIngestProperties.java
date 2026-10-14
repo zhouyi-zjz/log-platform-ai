@@ -8,6 +8,8 @@ public class LogIngestProperties {
 
     /** Kafka 日志 Topic；建议生产环境使用 Data Stream 对应的独立 Topic。 */
     private String kafkaTopic = "logs.raw";
+    /** 日志写入 Elasticsearch 的消费组。 */
+    private String consumerGroup = "logs-es-writer";
     /** 是否由 Spring 启动时向 Kafka 申请创建 Topic；生产建议由 IaC 管理，因此默认关闭。 */
     private boolean topicAutoCreate = false;
     /** 自动创建 Topic 时使用的分区数。 */
@@ -35,6 +37,8 @@ public class LogIngestProperties {
 
     public String getKafkaTopic() { return kafkaTopic; }
     public void setKafkaTopic(String kafkaTopic) { this.kafkaTopic = kafkaTopic; }
+    public String getConsumerGroup() { return consumerGroup; }
+    public void setConsumerGroup(String consumerGroup) { this.consumerGroup = consumerGroup; }
     public boolean isTopicAutoCreate() { return topicAutoCreate; }
     public void setTopicAutoCreate(boolean topicAutoCreate) { this.topicAutoCreate = topicAutoCreate; }
     public int getTopicPartitions() { return topicPartitions; }
